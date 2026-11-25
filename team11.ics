@@ -1,0 +1,46 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//FYHA U9 Auto-Sync//Blue Vipers 11//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:FYHA U9 - Blue Vipers (11)
+X-WR-TIMEZONE:America/Moncton
+REFRESH-INTERVAL;VALUE=DURATION:PT6H
+X-PUBLISHED-TTL:PT6H
+BEGIN:VEVENT
+UID:fyha-u9-t11-20261128T0730@teamlinkt-sync
+DTSTAMP:20261125T224907Z
+DTSTART;TZID=America/Moncton:20261128T073000
+DTEND;TZID=America/Moncton:20261128T083000
+SUMMARY:U9 Hockey: Blue Vipers (11) vs Silver Rockets (12)
+LOCATION:York
+DESCRIPTION:FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
+END:VEVENT
+BEGIN:VEVENT
+UID:fyha-u9-t11-20261129T0700@teamlinkt-sync
+DTSTAMP:20261125T224907Z
+DTSTART;TZID=America/Moncton:20261129T070000
+DTEND;TZID=America/Moncton:20261129T080000
+SUMMARY:U9 Hockey: Blue Vipers (11) vs Hurricanes (9)
+LOCATION:Willie O’Ree 2
+DESCRIPTION:FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
+END:VEVENT
+BEGIN:VEVENT
+UID:fyha-u9-t11-20261205T0900@teamlinkt-sync
+DTSTAMP:20261125T224907Z
+DTSTART;TZID=America/Moncton:20261205T090000
+DTEND;TZID=America/Moncton:20261205T100000
+SUMMARY:U9 Hockey: Blue Vipers (11) vs Red Wings (6)
+LOCATION:York
+DESCRIPTION:FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
+END:VEVENT
+BEGIN:VEVENT
+UID:fyha-u9-t11-20261206T0700@teamlinkt-sync
+DTSTAMP:20261125T224907Z
+DTSTART;TZID=America/Moncton:20261206T070000
+DTEND;TZID=America/Moncton:20261206T080000
+SUMMARY:U9 Hockey: Blue Vipers (11) vs Silver Rockets (12)
+LOCATION:Willie O’Ree 1
+DESCRIPTION:FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
+END:VEVENT
+END:VCALENDAR
