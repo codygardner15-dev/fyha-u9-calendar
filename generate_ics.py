@@ -5,14 +5,14 @@ from bs4 import BeautifulSoup
 
 URL = "https://leagues.teamlinkt.com/fyha/U9Division"
 TEAM_NUMBER = "11"
-TEAM_NAME = "Blue Vipers (11)"
+TEAM_NAME = "Blue Vipers"
 OUTPUT_FILE = "team11.ics"
 
 TEAM_NAMES = {
-    "1": "Leafs (1)", "2": "North Stars (2)", "3": "Penguins (3)",
-    "4": "Oilers (4)", "5": "Seabeasts (5)", "6": "Red Wings (6)",
-    "7": "Creepers (7)", "8": "Dragons (8)", "9": "Hurricanes (9)",
-    "10": "Lumberjacks (10)", "11": "Blue Vipers (11)", "12": "Silver Rockets (12)"
+    "1": "Leafs", "2": "North Stars", "3": "Penguins",
+    "4": "Oilers", "5": "Seabeasts", "6": "Red Wings",
+    "7": "Creepers", "8": "Dragons", "9": "Hurricanes",
+    "10": "Lumberjacks", "11": "Blue Vipers", "12": "Silver Rockets"
 }
 
 def parse_schedule():
@@ -64,7 +64,7 @@ def parse_schedule():
 
             events.append({
                 "uid": uid,
-                "summary": f"{status_prefix}U9 Hockey: {TEAM_NAME} vs {opponent}",
+                "summary": f"{status_prefix}{TEAM_NAME} vs {opponent}",
                 "location": rink,
                 "dtstart": start_dt.strftime("%Y%m%dT%H%M%S"),
                 "dtend": end_dt.strftime("%Y%m%dT%H%M%S"),
