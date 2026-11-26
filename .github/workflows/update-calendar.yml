@@ -17,6 +17,8 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install requests beautifulsoup4
+      - name: Run stress checks
+        run: RUN_STRESS_TESTS=1 python -c "import generate_ics; generate_ics.run_stress_checks()"
       - run: python generate_ics.py
       - name: Commit updated calendar
         run: |
