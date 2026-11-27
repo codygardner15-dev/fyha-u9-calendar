@@ -40,7 +40,7 @@ DEFAULT_ARENA_MAP = {
 
 TENTATIVE_RE = re.compile(r"[\(\[]\s*TENTATIVE\s*[\)\]]|\bTENTATIVE\b", re.IGNORECASE)
 DATE_BANNER_RE = re.compile(
-    r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}\s*[-–—]\s*(?:[A-Za-z]+\s+)?\d{1,2}",
+    r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s\xa0]+\d{1,2}[\s\xa0]*[-–—][\s\xa0]*(?:[A-Za-z]+[\s\xa0]+)?\d{1,2}",
     re.IGNORECASE,
 )
 
@@ -145,14 +145,13 @@ def escape_ics(text):
 
 
 def table_is_tentative(table):
-    # 1. Inspect table caption and any header/banner rows before the first data row.
     parts = []
     caption = table.find("caption")
     if caption is not None:
-        parts.append(caption.get_text(" ", strip=True))
+        parts.append(" ".join(caption.get_text(" ", strip=True).split()))
 
     for row in table.find_all("tr"):
-        cells = [c.get_text(" ", strip=True) for c in row.find_all(["td", "th"])]
+        cells = [" ".join(c.get_text(" ", strip=True).split()) for c in row.find_all(["td", "th"])]
         if cells and "+" in cells[0]:
             break
         if cells:
@@ -161,8 +160,6 @@ def table_is_tentative(table):
     if TENTATIVE_RE.search(" ".join(parts)):
         return True
 
-    # 2. Walk backwards through preceding elements without crossing an earlier table,
-    # checking only banner/heading-like blocks that contain a date range or TENTATIVE.
     for el in table.find_all_previous():
         if el is table:
             continue
@@ -171,7 +168,7 @@ def table_is_tentative(table):
         if el.name not in ("div", "p", "h1", "h2", "h3", "h4", "h5", "h6", "section", "header", "tr", "th"):
             continue
         text = " ".join(el.get_text(" ", strip=True).split())
-        if not text or len(text) > 160:
+        if not text or len(text) > 200:
             continue
         if DATE_BANNER_RE.search(text) or TENTATIVE_RE.search(text):
             return bool(TENTATIVE_RE.search(text))
@@ -181,7 +178,6 @@ def table_is_tentative(table):
 
 def infer_season_year(dt_month, now=None):
     ref = now or datetime.now()
-    # Hockey season runs roughly Aug/Sep through Mar/Apr.
     if ref.month >= 8:
         season_start_year = ref.year
     else:
