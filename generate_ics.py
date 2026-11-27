@@ -332,11 +332,12 @@ def run_stress_checks():
         globals()["OUTPUT_FILE"] = test_output
         build_ics(evs)
         assert os.path.exists(test_output)
-        with open(test_output, "r", encoding="utf-8") as f:
-            ics_text = f.read()
+        with open(test_output, "rb") as f:
+            ics_bytes = f.read()
+        ics_text = ics_bytes.decode("utf-8")
         assert "BEGIN:VCALENDAR" in ics_text
         assert "END:VCALENDAR" in ics_text
-        assert "\r\n" in ics_text
+        assert b"\r\n" in ics_bytes
         assert "SUMMARY:Blue Vipers vs Silver Rockets" in ics_text
         assert "SUMMARY:[TENTATIVE] Blue Vipers vs Red Wings" in ics_text
     finally:
