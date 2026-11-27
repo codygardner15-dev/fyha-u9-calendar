@@ -142,7 +142,6 @@ def escape_ics(text):
 
 
 def table_is_tentative(table):
-    # 1. Check inside the table's caption and first two rows first.
     internal_parts = []
     caption = table.find("caption")
     if caption is not None:
@@ -152,11 +151,10 @@ def table_is_tentative(table):
     if "TENTATIVE" in " ".join(internal_parts).upper():
         return True
 
-    # 2. Walk backwards in document order for the gray date-range banner bar
-    # directly above this table (even if wrapped in nested divs), stopping at
-    # any earlier table so flags never bleed across weeks.
     for el in table.find_all_previous():
-        if el.name == "table" or el.find("table") is not None:
+        if el is table:
+            continue
+        if el.name == "table" or any(t is not table for t in el.find_all("table")):
             break
         text = " ".join(el.get_text(" ", strip=True).split())
         if not text:
