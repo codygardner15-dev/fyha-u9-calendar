@@ -2,8 +2,8 @@ import json
 import os
 import re
 from datetime import datetime, timezone
-import requests
 from bs4 import BeautifulSoup
+import requests
 
 URL = "https://leagues.teamlinkt.com/fyha/U9Division"
 TEAM_NUMBER = "11"
@@ -100,9 +100,15 @@ def parse_schedule(soup, team_names):
     events = []
 
     for table in soup.find_all("table"):
-        first_cell = table.find(["th", "td"])
-        header_banner = first_cell.get_text(strip=True) if first_cell else ""
-        is_tentative = "TENTATIVE" in header_banner.upper()
+        caption = table.find("caption")
+        first_row = table.find("tr")
+        prev_el = table.find_previous(["h1", "h2", "h3", "h4", "p", "div"])
+        banner_text = " ".join(
+            part.get_text(" ", strip=True)
+            for part in (caption, first_row, prev_el)
+            if part is not None
+        )
+        is_tentative = "TENTATIVE" in banner_text.upper()
 
         for row in table.find_all("tr"):
             cells = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
@@ -232,64 +238,4 @@ def run_stress_checks():
         assert names["11"] == "Blue Vipers"
         assert names["12"] == "Silver Rockets", f"Expected Silver Rockets, got {names['12']}"
         assert "13" not in names
-        assert names.get("13", "Team 13") == "Team 13"
-
-        york_loc, york_rink = map_location("York")
-        assert york_loc == "York Arena" and york_rink == ""
-
-        wor1_loc, wor1_rink = map_location("Willie O'Ree 1")
-        assert wor1_loc == "Willie O'Ree Place, Cliffe Street, Fredericton, NB, Canada"
-        assert wor1_rink == "Rink 1"
-
-        wor2_loc, wor2_rink = map_location("Willie O'Ree 2")
-        assert wor2_loc == "Willie O'Ree Place, Cliffe Street, Fredericton, NB, Canada"
-        assert wor2_rink == "Rink 2"
-
-        gh_nhl_loc, gh_nhl_rink = map_location("Grant Harvey NHL")
-        assert gh_nhl_loc == "Grant-Harvey Centre" and gh_nhl_rink == "NHL Rink"
-
-        gh_oly_loc, gh_oly_rink = map_location("Grant Harvey Olympic")
-        assert gh_oly_loc == "Grant-Harvey Centre" and gh_oly_rink == "Olympic Rink"
-
-        beav_loc, beav_rink = map_location("Beaverbrook")
-        assert beav_loc == "Lady Beaverbrook Rink" and beav_rink == ""
-
-        evs = parse_schedule(soup, names)
-        assert len(evs) == 5, f"Expected 5 events, got {len(evs)}"
-        assert evs[0]["summary"] == "Blue Vipers vs Silver Rockets"
-        assert evs[0]["location"] == "York Arena"
-        assert evs[1]["summary"] == "Blue Vipers vs Hurricanes"
-        assert "Rink 2" in evs[1]["description"]
-        assert evs[2]["summary"] == "Blue Vipers vs Team 13"
-        assert "NHL Rink" in evs[2]["description"]
-        assert evs[3]["summary"] == "[TENTATIVE] Blue Vipers vs Red Wings"
-        assert "Rink 1" in evs[3]["description"]
-        assert evs[4]["summary"] == "[TENTATIVE] Blue Vipers vs Silver Rockets"
-        assert "Olympic Rink" in evs[4]["description"]
-
-        assert escape_ics("A;B,C\\D\nE") == "A\\;B\\,C\\\\D\\nE"
-        globals()["OUTPUT_FILE"] = test_output
-        build_ics(evs)
-        assert os.path.exists(test_output)
-        with open(test_output, "r", encoding="utf-8") as f:
-            ics_text = f.read()
-        assert "BEGIN:VCALENDAR" in ics_text
-        assert "END:VCALENDAR" in ics_text
-        assert "SUMMARY:[TENTATIVE] Blue Vipers vs Red Wings" in ics_text
-    finally:
-        globals()["TEAM_NAMES_FILE"] = original_names_file
-        globals()["OUTPUT_FILE"] = original_output
-        if os.path.exists(test_output):
-            os.remove(test_output)
-
-    print("All stress tests passed.")
-
-
-if __name__ == "__main__":
-    if os.environ.get("RUN_STRESS_TESTS") == "1":
-        run_stress_checks()
-    resp = requests.get(URL, timeout=15)
-    resp.raise_for_status()
-    page_soup = BeautifulSoup(resp.text, "html.parser")
-    active_names = resolve_team_names(page_soup)
-    build_ics(parse_schedule(page_soup, active_names))
+        assert names.get("13", "Team 13") == "
