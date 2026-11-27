@@ -12,18 +12,18 @@ OUTPUT_FILE = "team11.ics"
 TEAM_NAMES_FILE = "team_names.json"
 
 DEFAULT_TEAM_NAMES = {
-    "1": "Team 1",
+    "1": "Leafs",
     "2": "North Stars",
-    "3": "Team 3",
-    "4": "Team 4",
-    "5": "Team 5",
-    "6": "Team 6",
-    "7": "Team 7",
-    "8": "Team 8",
-    "9": "Team 9",
-    "10": "Team 10",
+    "3": "Penguins",
+    "4": "Oilers",
+    "5": "Seabeasts",
+    "6": "Red Wings",
+    "7": "Creepers",
+    "8": "Dragons",
+    "9": "Hurricanes",
+    "10": "Lumberjacks",
     "11": "Blue Vipers",
-    "12": "Team 12",
+    "12": "Silver Rockets",
 }
 
 
@@ -131,8 +131,12 @@ def parse_schedule(soup, team_names):
             if "AM" not in start_part.upper() and "PM" not in start_part.upper():
                 start_part = f"{start_part} {meridiem}"
 
-            start_dt = datetime.strptime(f"{dt_date.strftime('%Y-%m-%d')} {start_part}", "%Y-%m-%d %I:%M %p")
-            end_dt = datetime.strptime(f"{dt_date.strftime('%Y-%m-%d')} {end_part}", "%Y-%m-%d %I:%M %p")
+            start_dt = datetime.strptime(
+                f"{dt_date.strftime('%Y-%m-%d')} {start_part}", "%Y-%m-%d %I:%M %p"
+            )
+            end_dt = datetime.strptime(
+                f"{dt_date.strftime('%Y-%m-%d')} {end_part}", "%Y-%m-%d %I:%M %p"
+            )
 
             status_prefix = "[TENTATIVE] " if is_tentative else ""
             status_label = "Tentative" if is_tentative else "Confirmed"
@@ -141,84 +145,4 @@ def parse_schedule(soup, team_names):
             desc_parts = []
             if rink_note:
                 desc_parts.append(rink_note)
-            desc_parts.append(f"FYHA U9 Ice Time ({status_label}). Source: {URL}")
-            description = " - ".join(desc_parts)
-
-            events.append({
-                "uid": uid,
-                "summary": f"{status_prefix}{TEAM_NAME} vs {opponent}",
-                "location": location_name,
-                "dtstart": start_dt.strftime("%Y%m%dT%H%M%S"),
-                "dtend": end_dt.strftime("%Y%m%dT%H%M%S"),
-                "description": description,
-            })
-
-    return events
-
-
-def build_ics(events):
-    lines = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//FYHA U9 Auto-Sync//Blue Vipers 11//EN",
-        "CALSCALE:GREGORIAN",
-        "METHOD:PUBLISH",
-        "X-WR-CALNAME:FYHA U9 - Blue Vipers (11)",
-        "X-WR-TIMEZONE:America/Moncton",
-        "REFRESH-INTERVAL;VALUE=DURATION:PT6H",
-        "X-PUBLISHED-TTL:PT6H",
-    ]
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-
-    for ev in events:
-        lines.extend([
-            "BEGIN:VEVENT",
-            f"UID:{ev['uid']}",
-            f"DTSTAMP:{stamp}",
-            f"DTSTART;TZID=America/Moncton:{ev['dtstart']}",
-            f"DTEND;TZID=America/Moncton:{ev['dtend']}",
-            f"SUMMARY:{escape_ics(ev['summary'])}",
-            f"LOCATION:{escape_ics(ev['location'])}",
-            f"DESCRIPTION:{escape_ics(ev['description'])}",
-            "END:VEVENT",
-        ])
-
-    lines.append("END:VCALENDAR")
-    with open(OUTPUT_FILE, "w", encoding="utf-8", newline="\r\n") as f:
-        f.write("\n".join(lines) + "\n")
-
-
-def run_stress_checks():
-    sample_html = """
-    <table>
-      <tr><th>Nov 23 - Nov 29</th></tr>
-      <tr><td>11 + 12</td><td>Saturday, Nov 28</td><td>7:30–8:30 AM</td><td>York</td></tr>
-      <tr><td>9 + 11</td><td>Sunday, Nov 29</td><td>7:00–8:00 AM</td><td>Willie O'Ree 2</td></tr>
-      <tr><td>11 + 13</td><td>Monday, Nov 30</td><td>4:30–5:30 PM</td><td>Grant Harvey NHL</td></tr>
-    </table>
-    <table><th>Hurricanes (9)</th><th>Silver Rockets (12)</th></table>
-    """
-    soup = BeautifulSoup(sample_html, "html.parser")
-    names = resolve_team_names(soup)
-    assert names["9"] == "Hurricanes", f"Expected Hurricanes, got {names['9']}"
-    assert names["12"] == "Silver Rockets", f"Expected Silver Rockets, got {names['12']}"
-    assert names["13"] == "Team 13", f"Expected Team 13 fallback, got {names['13']}"
-
-    evs = parse_schedule(soup, names)
-    assert len(evs) == 3
-    assert evs[0]["location"] == "York Arena"
-    assert evs[1]["location"] == "Willie O'Ree Place, Cliffe Street, Fredericton, NB, Canada"
-    assert "Rink 2" in evs[1]["description"]
-    assert evs[2]["summary"] == "Blue Vipers vs Team 13"
-    assert "NHL Rink" in evs[2]["description"]
-    print("All stress tests passed.")
-
-
-if __name__ == "__main__":
-    if os.environ.get("RUN_STRESS_TESTS") == "1":
-        run_stress_checks()
-    resp = requests.get(URL, timeout=15)
-    resp.raise_for_status()
-    page_soup = BeautifulSoup(resp.text, "html.parser")
-    active_names = resolve_team_names(page_soup)
-    build_ics(parse_schedule(page_soup, active_names))
+            desc_parts.append(f"FYHA
