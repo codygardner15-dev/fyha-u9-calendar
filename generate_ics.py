@@ -98,8 +98,6 @@ def escape_ics(text):
 
 
 def table_is_tentative(table):
-    # Inspect only this table's own caption and first header/row so each weekly
-    # table independently reflects whether "(TENTATIVE)" is present on the page.
     caption = table.find("caption")
     first_row = table.find("tr")
     banner_text = " ".join(
@@ -112,7 +110,6 @@ def table_is_tentative(table):
 
 def infer_season_year(dt_month, now=None):
     ref = now or datetime.now()
-    # FYHA hockey seasons run roughly September through April across calendar years.
     if ref.month >= 9 and dt_month <= 4:
         return ref.year + 1
     if ref.month <= 4 and dt_month >= 9:
@@ -189,8 +186,6 @@ def parse_schedule(soup, team_names):
                 "description": description,
             })
 
-    # Sort chronologically so daily slot numbering (slot1, slot2, ...) is deterministic
-    # and overwrites the same event slot even if time or rink changes on that date.
     raw_events.sort(key=lambda e: e["start_dt"])
 
     daily_slot_counts = defaultdict(int)
@@ -307,3 +302,57 @@ def run_stress_checks():
 
         evs = parse_schedule(soup, names)
         assert len(evs) == 5, f"Expected 5 events, got {len(evs)}"
+        assert evs[0]["summary"] == "Blue Vipers vs Silver Rockets"
+        assert "(Confirmed)" in evs[0]["description"]
+        assert evs[0]["location"] == "York Arena"
+        assert evs[0]["uid"].endswith("-slot1@teamlinkt-sync")
+        assert evs[1]["summary"] == "Blue Vipers vs Hurricanes"
+        assert "(Confirmed)" in evs[1]["description"]
+        assert "Rink 2" in evs[1]["description"]
+        assert evs[2]["summary"] == "Blue Vipers vs Team 13"
+        assert "NHL Rink" in evs[2]["description"]
+        assert evs[3]["summary"] == "[TENTATIVE] Blue Vipers vs Red Wings"
+        assert "(Tentative)" in evs[3]["description"]
+        assert "Rink 1" in evs[3]["description"]
+        assert evs[4]["summary"] == "[TENTATIVE] Blue Vipers vs Silver Rockets"
+        assert "(Tentative)" in evs[4]["description"]
+        assert "Olympic Rink" in evs[4]["description"]
+
+        shifted_html = (
+            sample_html.replace("9:00-10:00 AM", "8:15-9:15 AM")
+            .replace("Willie O'Ree 1", "York")
+            .replace("Nov 30 - Dec 6 (TENTATIVE)", "Nov 30 - Dec 6")
+        )
+        shifted_evs = parse_schedule(BeautifulSoup(shifted_html, "html.parser"), names)
+        assert shifted_evs[3]["uid"] == evs[3]["uid"], "UID should stay stable when time/rink/status changes"
+        assert shifted_evs[3]["summary"] == "Blue Vipers vs Red Wings"
+        assert "(Confirmed)" in shifted_evs[3]["description"]
+
+        assert escape_ics("A;B,C\\D\nE") == "A\\;B\\,C\\\\D\\nE"
+        globals()["OUTPUT_FILE"] = test_output
+        build_ics(evs)
+        assert os.path.exists(test_output)
+        with open(test_output, "r", encoding="utf-8") as f:
+            ics_text = f.read()
+        assert "BEGIN:VCALENDAR" in ics_text
+        assert "END:VCALENDAR" in ics_text
+        assert "\r\n" in ics_text
+        assert "SUMMARY:Blue Vipers vs Silver Rockets" in ics_text
+        assert "SUMMARY:[TENTATIVE] Blue Vipers vs Red Wings" in ics_text
+    finally:
+        globals()["TEAM_NAMES_FILE"] = original_names_file
+        globals()["OUTPUT_FILE"] = original_output
+        if os.path.exists(test_output):
+            os.remove(test_output)
+
+    print("All stress tests passed.")
+
+
+if __name__ == "__main__":
+    if os.environ.get("RUN_STRESS_TESTS") == "1":
+        run_stress_checks()
+    resp = requests.get(URL, timeout=15)
+    resp.raise_for_status()
+    page_soup = BeautifulSoup(resp.text, "html.parser")
+    active_names = resolve_team_names(page_soup)
+    build_ics(parse_schedule(page_soup, active_names))
