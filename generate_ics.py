@@ -1,3 +1,5 @@
+import json
+import os
 import re
 from datetime import datetime
 import requests
@@ -7,9 +9,9 @@ URL = "https://leagues.teamlinkt.com/fyha/U9Division"
 TEAM_NUMBER = "11"
 TEAM_NAME = "Blue Vipers"
 OUTPUT_FILE = "team11.ics"
+TEAM_NAMES_FILE = "team_names.json"
 
-# Exact Opponent names from TeamLinkt
-TEAM_NAMES = {
+DEFAULT_TEAM_NAMES = {
     "1": "Team 1",
     "2": "North Stars",
     "3": "Team 3",
@@ -21,11 +23,51 @@ TEAM_NAMES = {
     "9": "Team 9",
     "10": "Team 10",
     "11": "Blue Vipers",
-    "12": "Team 12"
+    "12": "Team 12",
 }
 
+
+def load_custom_team_names(filepath=TEAM_NAMES_FILE):
+    if not os.path.exists(filepath):
+        return {}
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        cleaned = {}
+        for k, v in data.items():
+            key_str = str(k).strip()
+            val_str = str(v).strip()
+            if key_str and val_str:
+                cleaned[key_str] = val_str
+        return cleaned
+    except Exception as exc:
+        print(f"Warning: Could not read {filepath} ({exc}). Using fallback names.")
+        return {}
+
+
+def extract_roster_names(soup):
+    found = {}
+    pattern = re.compile(r"^(.+?)\s*\((\d+)\)\s*$")
+    for tag in soup.find_all(["th", "td", "h2", "h3", "h4", "strong", "b"]):
+        text = " ".join(tag.get_text(" ", strip=True).split())
+        match = pattern.match(text)
+        if match:
+            name, num = match.group(1).strip(), match.group(2).strip()
+            if name and num and num not in found:
+                found[num] = name
+    return found
+
+
+def resolve_team_names(soup):
+    resolved = dict(DEFAULT_TEAM_NAMES)
+    resolved.update(extract_roster_names(soup))
+    resolved.update(load_custom_team_names())
+    return resolved
+
+
 def map_location(raw_rink):
-    # Normalize curly apostrophes and extra whitespace
     clean = raw_rink.replace("’", "'").strip()
     lower = clean.lower()
 
@@ -44,6 +86,7 @@ def map_location(raw_rink):
 
     return clean, ""
 
+
 def escape_ics(text):
     return (
         text.replace("\\", "\\\\")
@@ -52,10 +95,8 @@ def escape_ics(text):
         .replace("\n", "\\n")
     )
 
-def parse_schedule():
-    resp = requests.get(URL, timeout=15)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
+
+def parse_schedule(soup, team_names):
     events = []
 
     for table in soup.find_all("table"):
@@ -75,17 +116,15 @@ def parse_schedule():
                 continue
 
             opponent_num = teams[1] if teams[0] == TEAM_NUMBER else teams[0]
-            opponent = TEAM_NAMES.get(opponent_num, f"Team {opponent_num}")
+            opponent = team_names.get(opponent_num, f"Team {opponent_num}")
             location_name, rink_note = map_location(raw_rink)
 
-            # Parse date (e.g., "Saturday, Nov 28") using current season year
             clean_date = re.sub(r"^[A-Za-z]+,\s*", "", date_str)
             now = datetime.now()
             dt_date = datetime.strptime(f"{clean_date} {now.year}", "%b %d %Y")
             if now.month >= 9 and dt_date.month <= 4:
                 dt_date = dt_date.replace(year=now.year + 1)
 
-            # Parse time range (e.g., "7:30–8:30 AM")
             time_clean = time_str.replace("–", "-").replace("—", "-")
             start_part, end_part = [p.strip() for p in time_clean.split("-")]
             meridiem = "PM" if "PM" in end_part.upper() else "AM"
@@ -111,10 +150,11 @@ def parse_schedule():
                 "location": location_name,
                 "dtstart": start_dt.strftime("%Y%m%dT%H%M%S"),
                 "dtend": end_dt.strftime("%Y%m%dT%H%M%S"),
-                "description": description
+                "description": description,
             })
 
     return events
+
 
 def build_ics(events):
     lines = [
@@ -126,7 +166,7 @@ def build_ics(events):
         "X-WR-CALNAME:FYHA U9 - Blue Vipers (11)",
         "X-WR-TIMEZONE:America/Moncton",
         "REFRESH-INTERVAL;VALUE=DURATION:PT6H",
-        "X-PUBLISHED-TTL:PT6H"
+        "X-PUBLISHED-TTL:PT6H",
     ]
     stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
@@ -140,12 +180,45 @@ def build_ics(events):
             f"SUMMARY:{escape_ics(ev['summary'])}",
             f"LOCATION:{escape_ics(ev['location'])}",
             f"DESCRIPTION:{escape_ics(ev['description'])}",
-            "END:VEVENT"
+            "END:VEVENT",
         ])
 
     lines.append("END:VCALENDAR")
     with open(OUTPUT_FILE, "w", encoding="utf-8", newline="\r\n") as f:
         f.write("\n".join(lines) + "\n")
 
+
+def run_stress_checks():
+    sample_html = """
+    <table>
+      <tr><th>Nov 23 - Nov 29</th></tr>
+      <tr><td>11 + 12</td><td>Saturday, Nov 28</td><td>7:30–8:30 AM</td><td>York</td></tr>
+      <tr><td>9 + 11</td><td>Sunday, Nov 29</td><td>7:00–8:00 AM</td><td>Willie O'Ree 2</td></tr>
+      <tr><td>11 + 13</td><td>Monday, Nov 30</td><td>4:30–5:30 PM</td><td>Grant Harvey NHL</td></tr>
+    </table>
+    <table><th>Hurricanes (9)</th><th>Silver Rockets (12)</th></table>
+    """
+    soup = BeautifulSoup(sample_html, "html.parser")
+    names = resolve_team_names(soup)
+    assert names["9"] == "Hurricanes", f"Expected Hurricanes, got {names['9']}"
+    assert names["12"] == "Silver Rockets", f"Expected Silver Rockets, got {names['12']}"
+    assert names["13"] == "Team 13", f"Expected Team 13 fallback, got {names['13']}"
+
+    evs = parse_schedule(soup, names)
+    assert len(evs) == 3
+    assert evs[0]["location"] == "York Arena"
+    assert evs[1]["location"] == "Willie O'Ree Place, Cliffe Street, Fredericton, NB, Canada"
+    assert "Rink 2" in evs[1]["description"]
+    assert evs[2]["summary"] == "Blue Vipers vs Team 13"
+    assert "NHL Rink" in evs[2]["description"]
+    print("All stress tests passed.")
+
+
 if __name__ == "__main__":
-    build_ics(parse_schedule())
+    if os.environ.get("RUN_STRESS_TESTS") == "1":
+        run_stress_checks()
+    resp = requests.get(URL, timeout=15)
+    resp.raise_for_status()
+    page_soup = BeautifulSoup(resp.text, "html.parser")
+    active_names = resolve_team_names(page_soup)
+    build_ics(parse_schedule(page_soup, active_names))
