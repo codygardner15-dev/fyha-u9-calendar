@@ -9,38 +9,38 @@ REFRESH-INTERVAL;VALUE=DURATION:PT6H
 X-PUBLISHED-TTL:PT6H
 BEGIN:VEVENT
 UID:fyha-u9-t11-20261128T0730@teamlinkt-sync
-DTSTAMP:20261126T183949Z
+DTSTAMP:20261127T014412Z
 DTSTART;TZID=America/Moncton:20261128T073000
 DTEND;TZID=America/Moncton:20261128T083000
 SUMMARY:Blue Vipers vs Silver Rockets
-LOCATION:York
+LOCATION:York Arena
 DESCRIPTION:FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
 END:VEVENT
 BEGIN:VEVENT
 UID:fyha-u9-t11-20261129T0700@teamlinkt-sync
-DTSTAMP:20261126T183949Z
+DTSTAMP:20261127T014412Z
 DTSTART;TZID=America/Moncton:20261129T070000
 DTEND;TZID=America/Moncton:20261129T080000
 SUMMARY:Blue Vipers vs Hurricanes
-LOCATION:Willie O’Ree 2
-DESCRIPTION:FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
+LOCATION:Willie O'Ree Place\, Cliffe Street\, Fredericton\, NB\, Canada
+DESCRIPTION:Rink 2 - FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
 END:VEVENT
 BEGIN:VEVENT
 UID:fyha-u9-t11-20261205T0900@teamlinkt-sync
-DTSTAMP:20261126T183949Z
+DTSTAMP:20261127T014412Z
 DTSTART;TZID=America/Moncton:20261205T090000
 DTEND;TZID=America/Moncton:20261205T100000
 SUMMARY:Blue Vipers vs Red Wings
-LOCATION:York
+LOCATION:York Arena
 DESCRIPTION:FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
 END:VEVENT
 BEGIN:VEVENT
 UID:fyha-u9-t11-20261206T0700@teamlinkt-sync
-DTSTAMP:20261126T183949Z
+DTSTAMP:20261127T014412Z
 DTSTART;TZID=America/Moncton:20261206T070000
 DTEND;TZID=America/Moncton:20261206T080000
 SUMMARY:Blue Vipers vs Silver Rockets
-LOCATION:Willie O’Ree 1
-DESCRIPTION:FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
+LOCATION:Willie O'Ree Place\, Cliffe Street\, Fredericton\, NB\, Canada
+DESCRIPTION:Rink 1 - FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
 END:VEVENT
 END:VCALENDAR
