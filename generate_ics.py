@@ -31,7 +31,6 @@ DEFAULT_LOCATIONS = {
 }
 
 STATUS_RE = re.compile(r"\b(CONFIRMED|TENTATIVE)\b", re.IGNORECASE)
-STATUS_LINE_RE = re.compile(r"^\s*(?:status\s*:\s*)?(CONFIRMED|TENTATIVE)[\s.!:;,-]*$", re.IGNORECASE)
 DATE_BANNER_RE = re.compile(
     r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s\xa0]+\d{1,2}[\s\xa0]*[-–—][\s\xa0]*(?:[A-Za-z]+[\s\xa0]+)?\d{1,2}",
     re.IGNORECASE,
@@ -117,165 +116,44 @@ def escape_ics(text):
     return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
 
-def table_status(table):
-    """Get status from the strict standalone status line after the nearest date banner.
+def _date_header_nodes(soup):
+    """Return date-range header nodes once each, in document order."""
+    nodes = []
+    for tag in soup.find_all(True):
+        text = " ".join(tag.get_text(" ", strip=True).split())
+        if not DATE_BANNER_RE.search(text):
+            continue
+        # Keep the innermost matching node to avoid treating every wrapper
+        # around one header as a new section boundary.
+        if any(DATE_BANNER_RE.search(" ".join(child.get_text(" ", strip=True).split()))
+               for child in tag.find_all(True)):
+            continue
+        nodes.append(tag)
+    return nodes
 
-    TeamLinkt may render the date range and CONFIRMED/TENTATIVE as separate
-    headings. Search backward from the schedule table, remember the nearest
-    standalone status line, and stop at the nearest earlier date banner or
-    schedule table so a previous week's status cannot leak into this week.
+
+def _header_status(header):
+    """Read status from the date header (including its small header wrapper).
+
+    A header with no explicit status is a new, neutral/confirmed section; it
+    must not inherit TENTATIVE from the preceding date range.
     """
-    status_line = None
-    for el in table.find_all_previous():
-        if el.name == "table":
+    candidates = [header]
+    for parent in header.parents:
+        if getattr(parent, "name", None) in ("[document]", "html", "body"):
             break
-        if el.find("table") is not None:
-            continue
-        text = " ".join(el.get_text(" ", strip=True).split())
-        if not text or len(text) > 200:
-            continue
-
-        # Ignore wrapper tags when a more specific descendant contains the
-        # date header; its text is visited separately during this reverse scan.
-        if DATE_BANNER_RE.search(text) and any(
-            DATE_BANNER_RE.search(" ".join(child.get_text(" ", strip=True).split()))
-            for child in el.find_all(True)
-        ):
-            continue
-
-        if DATE_BANNER_RE.search(text):
-            if status_line:
-                return status_line
-            match = STATUS_RE.search(text)
-            return match.group(1).capitalize() if match else "Confirmed"
-
-        match = STATUS_LINE_RE.fullmatch(text)
-        if match and status_line is None:
-            status_line = match.group(1).capitalize()
-
-    caption = table.find("caption")
-    if caption:
-        match = STATUS_RE.search(caption.get_text(" ", strip=True))
-        if match:
-            return match.group(1).capitalize()
-    return "Confirmed"
+        text = " ".join(parent.get_text(" ", strip=True).split())
+        # Header components may split the range and status into sibling spans.
+        # Use the nearest compact parent containing exactly this one date range.
+        if (len(text) <= 180 and len(DATE_BANNER_RE.findall(text)) == 1
+                and parent.find("table") is None):
+            candidates.append(parent)
+            break
+    header_text = " ".join(" ".join(c.get_text(" ", strip=True).split()) for c in candidates)
+    match = STATUS_RE.search(header_text)
+    return match.group(1).capitalize() if match else "Confirmed"
 
 
-def infer_season_year(dt_month, now=None):
-    ref = now or datetime.now()
-    season_start_year = ref.year if ref.month >= 8 else ref.year - 1
-    return season_start_year if dt_month >= 8 else season_start_year + 1
-
-
-def parse_schedule(soup, team_names, locations_map=None):
-    raw_events = []
-    now = datetime.now()
-    active_locations = locations_map if locations_map is not None else load_locations()
-    for table in soup.find_all("table"):
-        status = table_status(table)
-        for row in table.find_all("tr"):
-            cells = [" ".join(c.get_text(" ", strip=True).split()) for c in row.find_all(["td", "th"])]
-            if len(cells) < 4 or "+" not in cells[0]:
-                continue
-            teams_raw, date_str, time_str, raw_rink = cells[:4]
-            if not raw_rink.strip():
-                continue
-            teams = [t.strip() for t in teams_raw.split("+")]
-            if TEAM_NUMBER not in teams:
-                continue
-            opponent_num = teams[1] if teams[0] == TEAM_NUMBER else teams[0]
-            opponent = team_names.get(opponent_num, f"Team {opponent_num}")
-            location_name, rink_note = map_location(raw_rink, active_locations)
-            clean_date = re.sub(r"^[A-Za-z]+,\s*", "", date_str).strip()
-            month_day_dt = datetime.strptime(f"{clean_date} 2000", "%b %d %Y")
-            dt_date = month_day_dt.replace(year=infer_season_year(month_day_dt.month, now))
-            time_parts = [p.strip() for p in time_str.replace("\u2013", "-").replace("\u2014", "-").split("-")]
-            if len(time_parts) != 2:
-                continue
-            start_part, end_part = time_parts
-            end_upper, start_upper = end_part.upper(), start_part.upper()
-            meridiem = "PM" if "PM" in end_upper else ("AM" if "AM" in end_upper else "AM")
-            if "AM" not in start_upper and "PM" not in start_upper:
-                start_part = f"{start_part} {meridiem}"
-            if "AM" not in end_upper and "PM" not in end_upper:
-                end_part = f"{end_part} {meridiem}"
-            start_dt = datetime.strptime(f"{dt_date:%Y-%m-%d} {start_part}", "%Y-%m-%d %I:%M %p")
-            end_dt = datetime.strptime(f"{dt_date:%Y-%m-%d} {end_part}", "%Y-%m-%d %I:%M %p")
-            status_prefix = "[TENTATIVE] " if status == "Tentative" else ""
-            desc_parts = [rink_note] if rink_note else []
-            desc_parts.append(f"FYHA U9 Ice Time ({status}). Source: {URL}")
-            raw_events.append({
-                "date_key": start_dt.strftime("%Y%m%d"), "start_dt": start_dt,
-                "summary": f"{status_prefix}{TEAM_NAME} vs {opponent}", "location": location_name,
-                "dtstart": start_dt.strftime("%Y%m%dT%H%M%S"),
-                "dtend": end_dt.strftime("%Y%m%dT%H%M%S"),
-                "description": " - ".join(desc_parts),
-            })
-    raw_events.sort(key=lambda e: e["start_dt"])
-    counts, events = defaultdict(int), []
-    for ev in raw_events:
-        date_key = ev["date_key"]
-        counts[date_key] += 1
-        uid = f"fyha-u9-t{TEAM_NUMBER}-{date_key}-slot{counts[date_key]}@teamlinkt-sync"
-        events.append({"uid": uid, "summary": ev["summary"], "location": ev["location"],
-                       "dtstart": ev["dtstart"], "dtend": ev["dtend"], "description": ev["description"]})
-    return events
-
-
-def build_ics(events):
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//FYHA U9 Auto-Sync//Blue Vipers 11//EN",
-             "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:FYHA U9 - Blue Vipers (11)",
-             "X-WR-TIMEZONE:America/Moncton", "REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H",
-             "BEGIN:VTIMEZONE", "TZID:America/Moncton",
-             "BEGIN:STANDARD", "DTSTART:20071104T020000", "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU",
-             "TZOFFSETFROM:-0300", "TZOFFSETTO:-0400", "TZNAME:AST", "END:STANDARD",
-             "BEGIN:DAYLIGHT", "DTSTART:20070311T020000", "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU",
-             "TZOFFSETFROM:-0400", "TZOFFSETTO:-0300", "TZNAME:ADT", "END:DAYLIGHT",
-             "END:VTIMEZONE"]
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    for ev in events:
-        lines.extend(["BEGIN:VEVENT", f"UID:{ev['uid']}", f"DTSTAMP:{stamp}",
-                      f"DTSTART;TZID=America/Moncton:{ev['dtstart']}", f"DTEND;TZID=America/Moncton:{ev['dtend']}",
-                      f"SUMMARY:{escape_ics(ev['summary'])}", f"LOCATION:{escape_ics(ev['location'])}",
-                      f"DESCRIPTION:{escape_ics(ev['description'])}", "END:VEVENT"])
-    lines.append("END:VCALENDAR")
-    with open(OUTPUT_FILE, "w", encoding="utf-8", newline="\r\n") as f:
-        f.write("\r\n".join(lines) + "\r\n")
-
-
-def run_stress_checks():
-    sample_html = """
-    <h3>Nov 23 - Nov 29</h3>
-    <h4>CONFIRMED</h4>
-    <table>
-      <tr><th>Teams</th><th>Date</th><th>Time</th><th>Rink</th></tr>
-      <tr><td>11 + 12</td><td>Saturday, Nov 28</td><td>7:30-8:30 AM</td><td>York</td></tr>
-      <tr><td>9 + 11</td><td>Sunday, Nov 29</td><td>7:00-8:00 AM</td><td>Willie O'Ree 2</td></tr>
-    </table>
-    <h3>Nov 30 - Dec 6</h3>
-    <h4>TENTATIVE</h4>
-    <table>
-      <tr><th>Teams</th><th>Date</th><th>Time</th><th>Rink</th></tr>
-      <tr><td>6 + 11</td><td>Saturday, Dec 5</td><td>9:00-10:00 AM</td><td>Willie O'Ree 1</td></tr>
-      <tr><td>11 + 12</td><td>Sunday, Dec 6</td><td>7:00-8:00 AM</td><td>Grant Harvey Olympic</td></tr>
-    </table>
-    """
-    soup = BeautifulSoup(sample_html, "html.parser")
-    names = dict(DEFAULT_TEAM_NAMES)
-    locs = {normalize_key(k): dict(v) for k, v in DEFAULT_LOCATIONS.items()}
-    events = parse_schedule(soup, names, locs)
-    assert len(events) == 4, f"Expected 4 events, got {len(events)}"
-    assert all("(Confirmed)" in ev["description"] and not ev["summary"].startswith("[TENTATIVE]") for ev in events[:2])
-    assert all("(Tentative)" in ev["description"] and ev["summary"].startswith("[TENTATIVE]") for ev in events[2:])
-    print("All stress tests passed.")
-
-
-if __name__ == "__main__":
-    if os.environ.get("RUN_STRESS_TESTS") == "1":
-        run_stress_checks()
-    resp = requests.get(URL, timeout=15)
-    resp.raise_for_status()
-    page_soup = BeautifulSoup(resp.text, "html.parser")
-    active_names = resolve_team_names(page_soup)
-    active_locations = load_locations(LOCATIONS_FILE)
-    build_ics(parse_schedule(page_soup, active_names, active_locations))
+def table_status(table):
+    """Status in the latest date-range header before this table in document order."""
+    soup = table soup if False else None
