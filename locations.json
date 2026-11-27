@@ -1,0 +1,72 @@
+{
+  "willie o'ree 1": {
+    "location": "Willie O'Ree Place, Cliffe Street, Fredericton, NB, Canada",
+    "note": "Rink 1",
+    "address": "605 Cliffe Street",
+    "city": "Fredericton",
+    "postal_code": "E3A 0A1",
+    "province": "New Brunswick",
+    "country": "Canada",
+    "environment": "Indoor"
+  },
+  "willie o'ree 2": {
+    "location": "Willie O'Ree Place, Cliffe Street, Fredericton, NB, Canada",
+    "note": "Rink 2",
+    "address": "605 Cliffe Street",
+    "city": "Fredericton",
+    "postal_code": "E3A 0A1",
+    "province": "New Brunswick",
+    "country": "Canada",
+    "environment": "Indoor"
+  },
+  "grant harvey nhl": {
+    "location": "Grant-Harvey Centre",
+    "note": "NHL Rink",
+    "address": "600 Knowledge Park Drive",
+    "city": "Fredericton",
+    "postal_code": "E3C 2N5",
+    "province": "New Brunswick",
+    "country": "Canada",
+    "environment": "Indoor"
+  },
+  "grant harvey olympic": {
+    "location": "Grant-Harvey Centre",
+    "note": "Olympic Rink",
+    "address": "600 Knowledge Park Drive",
+    "city": "Fredericton",
+    "postal_code": "E3C 2N5",
+    "province": "New Brunswick",
+    "country": "Canada",
+    "environment": "Indoor"
+  },
+  "york": {
+    "location": "York Arena",
+    "note": "",
+    "address": "891 Barker Street",
+    "city": "Fredericton",
+    "postal_code": "E3A 3K4",
+    "province": "New Brunswick",
+    "country": "Canada",
+    "environment": "Indoor"
+  },
+  "york arena": {
+    "location": "York Arena",
+    "note": "",
+    "address": "891 Barker Street",
+    "city": "Fredericton",
+    "postal_code": "E3A 3K4",
+    "province": "New Brunswick",
+    "country": "Canada",
+    "environment": "Indoor"
+  },
+  "beaverbrook": {
+    "location": "Lady Beaverbrook Rink",
+    "note": "",
+    "address": "411 University Avenue",
+    "city": "Fredericton",
+    "postal_code": "E3B 4J3",
+    "province": "New Brunswick",
+    "country": "Canada",
+    "environment": "Indoor"
+  }
+}
