@@ -145,19 +145,21 @@ def escape_ics(text):
 
 
 def table_is_tentative(table):
-    parts = []
+    header_texts = []
     caption = table.find("caption")
     if caption is not None:
-        parts.append(" ".join(caption.get_text(" ", strip=True).split()))
+        header_texts.append(" ".join(caption.get_text(" ", strip=True).split()))
 
     for row in table.find_all("tr"):
-        cells = [" ".join(c.get_text(" ", strip=True).split()) for c in row.find_all(["td", "th"])]
-        if cells and "+" in cells[0]:
+        row_text = " ".join(row.get_text(" ", strip=True).split())
+        first_cell = row.find(["td", "th"])
+        first_text = " ".join(first_cell.get_text(" ", strip=True).split()) if first_cell else ""
+        if "+" in first_text:
             break
-        if cells:
-            parts.append(" ".join(cells))
+        if row_text:
+            header_texts.append(row_text)
 
-    if TENTATIVE_RE.search(" ".join(parts)):
+    if TENTATIVE_RE.search(" ".join(header_texts)):
         return True
 
     for el in table.find_all_previous():
@@ -165,8 +167,6 @@ def table_is_tentative(table):
             continue
         if el.name == "table" or any(t is not table for t in el.find_all("table")):
             break
-        if el.name not in ("div", "p", "h1", "h2", "h3", "h4", "h5", "h6", "section", "header", "tr", "th"):
-            continue
         text = " ".join(el.get_text(" ", strip=True).split())
         if not text or len(text) > 200:
             continue
