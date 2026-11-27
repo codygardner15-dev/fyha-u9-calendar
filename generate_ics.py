@@ -145,4 +145,4 @@ def parse_schedule(soup, team_names):
             desc_parts = []
             if rink_note:
                 desc_parts.append(rink_note)
-            desc_parts.append(f"FYHA
+           desc_parts.append(f"FYHA U9 Ice Time ({status_label}). Source: {URL}")
