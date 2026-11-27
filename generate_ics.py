@@ -238,4 +238,4 @@ def run_stress_checks():
         assert names["11"] == "Blue Vipers"
         assert names["12"] == "Silver Rockets", f"Expected Silver Rockets, got {names['12']}"
         assert "13" not in names
-        assert names.get("13", "Team 13") == "
+        assert names.get("13", "Team 13") == "Team 13"
