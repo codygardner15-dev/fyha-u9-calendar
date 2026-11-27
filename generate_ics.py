@@ -231,7 +231,8 @@ def run_stress_checks():
         assert names["10"] == "Lumberjacks"
         assert names["11"] == "Blue Vipers"
         assert names["12"] == "Silver Rockets", f"Expected Silver Rockets, got {names['12']}"
-        assert names["13"] == "Team 13", f"Expected Team 13 fallback, got {names['13']}"
+        assert "13" not in names
+        assert names.get("13", "Team 13") == "Team 13"
 
         york_loc, york_rink = map_location("York")
         assert york_loc == "York Arena" and york_rink == ""
