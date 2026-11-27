@@ -207,12 +207,24 @@ def run_stress_checks():
       <tr><td>6 + 11</td><td>Saturday, Dec 5</td><td>9:00-10:00 AM</td><td>Willie O'Ree 1</td></tr>
       <tr><td>11 + 12</td><td>Sunday, Dec 6</td><td>7:00-8:00 AM</td><td>Grant Harvey Olympic</td></tr>
     </table>
-    <table><th>Hurricanes (9)</th><th>Silver Rockets (12)</th></table>
+    <table>
+      <tr><th>Hurricanes (9)</th><th>Silver Rockets (12)</th></tr>
+    </table>
     """
     soup = BeautifulSoup(sample_html, "html.parser")
 
     names = resolve_team_names(soup)
+    assert names["1"] == "Leafs"
+    assert names["2"] == "North Stars"
+    assert names["3"] == "Penguins"
+    assert names["4"] == "Oilers"
+    assert names["5"] == "Seabeasts"
+    assert names["6"] == "Red Wings"
+    assert names["7"] == "Creepers"
+    assert names["8"] == "Dragons"
     assert names["9"] == "Hurricanes", f"Expected Hurricanes, got {names['9']}"
+    assert names["10"] == "Lumberjacks"
+    assert names["11"] == "Blue Vipers"
     assert names["12"] == "Silver Rockets", f"Expected Silver Rockets, got {names['12']}"
     assert names["13"] == "Team 13", f"Expected Team 13 fallback, got {names['13']}"
 
