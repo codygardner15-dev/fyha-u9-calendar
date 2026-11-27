@@ -116,82 +116,88 @@ def escape_ics(text):
     return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
 
-def parse_schedule(soup, team_names, locations_map=None):
-    """Parse schedule sections strictly in document order.
+def table_status(table):
+    """Use the nearest preceding date banner for this table."""
+    for el in table.find_all_previous():
+        if el.name == "table":
+            break
+        if el.find("table") is not None:
+            continue
+        text = " ".join(el.get_text(" ", strip=True).split())
+        if not text or len(text) > 200 or not DATE_BANNER_RE.search(text):
+            continue
+        match = STATUS_RE.search(text)
+        if match:
+            return match.group(1).capitalize()
+        return "Confirmed"
 
-    The latest date banner seen applies only to the schedule table(s) that
-    follow it, until the next date banner begins another independent section.
-    """
+    caption = table.find("caption")
+    if caption:
+        match = STATUS_RE.search(caption.get_text(" ", strip=True))
+        if match:
+            return match.group(1).capitalize()
+
+    for row in table.find_all("tr"):
+        cells = [" ".join(c.get_text(" ", strip=True).split()) for c in row.find_all(["td", "th"])]
+        if not cells or any("+" in cell for cell in cells):
+            break
+        match = STATUS_RE.search(" ".join(cells))
+        if match:
+            return match.group(1).capitalize()
+
+    return "Confirmed"
+
+
+def infer_season_year(dt_month, now=None):
+    ref = now or datetime.now()
+    season_start_year = ref.year if ref.month >= 8 else ref.year - 1
+    return season_start_year if dt_month >= 8 else season_start_year + 1
+
+
+def parse_schedule(soup, team_names, locations_map=None):
     raw_events = []
     now = datetime.now()
     active_locations = locations_map if locations_map is not None else load_locations()
-    current_status = "Confirmed"
-
-    for element in soup.find_all(["div", "section", "header", "table", "caption"]):
-        if element.name == "table":
-            # Ignore roster/name tables without a schedule matchup.
-            table_text = " ".join(element.get_text(" ", strip=True).split())
-
-            for row in element.find_all("tr"):
-                cells = [" ".join(c.get_text(" ", strip=True).split()) for c in row.find_all(["td", "th"])]
-
-                # A table containing a date range is a banner, not a schedule.
-                if len(cells) == 1:
-                    banner_text = cells[0]
-                    if DATE_BANNER_RE.search(banner_text):
-                        match = STATUS_RE.search(banner_text)
-                        current_status = match.group(1).capitalize() if match else "Confirmed"
-                        continue
-
-                if len(cells) < 4 or "+" not in cells[0]:
-                    continue
-
-                teams_raw, date_str, time_str, raw_rink = cells[:4]
-                if not raw_rink.strip():
-                    continue
-                teams = [t.strip() for t in teams_raw.split("+")]
-                if TEAM_NUMBER not in teams:
-                    continue
-
-                opponent_num = teams[1] if teams[0] == TEAM_NUMBER else teams[0]
-                opponent = team_names.get(opponent_num, f"Team {opponent_num}")
-                location_name, rink_note = map_location(raw_rink, active_locations)
-
-                clean_date = re.sub(r"^[A-Za-z]+,\s*", "", date_str).strip()
-                month_day_dt = datetime.strptime(f"{clean_date} 2000", "%b %d %Y")
-                dt_date = month_day_dt.replace(year=infer_season_year(month_day_dt.month, now))
-
-                time_parts = [p.strip() for p in time_str.replace("\u2013", "-").replace("\u2014", "-").split("-")]
-                if len(time_parts) != 2:
-                    continue
-                start_part, end_part = time_parts
-                end_upper, start_upper = end_part.upper(), start_part.upper()
-                meridiem = "PM" if "PM" in end_upper else ("AM" if "AM" in end_upper else "AM")
-                if "AM" not in start_upper and "PM" not in start_upper:
-                    start_part = f"{start_part} {meridiem}"
-                if "AM" not in end_upper and "PM" not in end_upper:
-                    end_part = f"{end_part} {meridiem}"
-
-                start_dt = datetime.strptime(f"{dt_date:%Y-%m-%d} {start_part}", "%Y-%m-%d %I:%M %p")
-                end_dt = datetime.strptime(f"{dt_date:%Y-%m-%d} {end_part}", "%Y-%m-%d %I:%M %p")
-
-                status_prefix = "[TENTATIVE] " if current_status == "Tentative" else ""
-                desc_parts = [rink_note] if rink_note else []
-                desc_parts.append(f"FYHA U9 Ice Time ({current_status}). Source: {URL}")
-                raw_events.append({
-                    "date_key": start_dt.strftime("%Y%m%d"), "start_dt": start_dt,
-                    "summary": f"{status_prefix}{TEAM_NAME} vs {opponent}", "location": location_name,
-                    "dtstart": start_dt.strftime("%Y%m%dT%H%M%S"),
-                    "dtend": end_dt.strftime("%Y%m%dT%H%M%S"),
-                    "description": " - ".join(desc_parts),
-                })
-            continue
-
-        text = " ".join(element.get_text(" ", strip=True).split())
-        if DATE_BANNER_RE.search(text):
-            match = STATUS_RE.search(text)
-            current_status = match.group(1).capitalize() if match else "Confirmed"
-
+    for table in soup.find_all("table"):
+        status = table_status(table)
+        for row in table.find_all("tr"):
+            cells = [" ".join(c.get_text(" ", strip=True).split()) for c in row.find_all(["td", "th"])]
+            if len(cells) < 4 or "+" not in cells[0]:
+                continue
+            teams_raw, date_str, time_str, raw_rink = cells[:4]
+            if not raw_rink.strip():
+                continue
+            teams = [t.strip() for t in teams_raw.split("+")]
+            if TEAM_NUMBER not in teams:
+                continue
+            opponent_num = teams[1] if teams[0] == TEAM_NUMBER else teams[0]
+            opponent = team_names.get(opponent_num, f"Team {opponent_num}")
+            location_name, rink_note = map_location(raw_rink, active_locations)
+            clean_date = re.sub(r"^[A-Za-z]+,\s*", "", date_str).strip()
+            month_day_dt = datetime.strptime(f"{clean_date} 2000", "%b %d %Y")
+            dt_date = month_day_dt.replace(year=infer_season_year(month_day_dt.month, now))
+            time_parts = [p.strip() for p in time_str.replace("\u2013", "-").replace("\u2014", "-").split("-")]
+            if len(time_parts) != 2:
+                continue
+            start_part, end_part = time_parts
+            end_upper, start_upper = end_part.upper(), start_part.upper()
+            meridiem = "PM" if "PM" in end_upper else ("AM" if "AM" in end_upper else "AM")
+            if "AM" not in start_upper and "PM" not in start_upper:
+                start_part = f"{start_part} {meridiem}"
+            if "AM" not in end_upper and "PM" not in end_upper:
+                end_part = f"{end_part} {meridiem}"
+            start_dt = datetime.strptime(f"{dt_date:%Y-%m-%d} {start_part}", "%Y-%m-%d %I:%M %p")
+            end_dt = datetime.strptime(f"{dt_date:%Y-%m-%d} {end_part}", "%Y-%m-%d %I:%M %p")
+            status_prefix = "[TENTATIVE] " if status == "Tentative" else ""
+            desc_parts = [rink_note] if rink_note else []
+            desc_parts.append(f"FYHA U9 Ice Time ({status}). Source: {URL}")
+            raw_events.append({
+                "date_key": start_dt.strftime("%Y%m%d"), "start_dt": start_dt,
+                "summary": f"{status_prefix}{TEAM_NAME} vs {opponent}", "location": location_name,
+                "dtstart": start_dt.strftime("%Y%m%dT%H%M%S"),
+                "dtend": end_dt.strftime("%Y%m%dT%H%M%S"),
+                "description": " - ".join(desc_parts),
+            })
     raw_events.sort(key=lambda e: e["start_dt"])
     counts, events = defaultdict(int), []
     for ev in raw_events:
@@ -203,29 +209,16 @@ def parse_schedule(soup, team_names, locations_map=None):
     return events
 
 
-def infer_season_year(dt_month, now=None):
-    ref = now or datetime.now()
-    season_start_year = ref.year if ref.month >= 8 else ref.year - 1
-    return season_start_year if dt_month >= 8 else season_start_year + 1
-
-
-def table_status(table):
-    """Compatibility helper: inspect the closest preceding date banner."""
-    current_status = "Confirmed"
-    for el in table.find_all_previous():
-        if el.name == "table":
-            break
-        text = " ".join(el.get_text(" ", strip=True).split())
-        if DATE_BANNER_RE.search(text):
-            match = STATUS_RE.search(text)
-            return match.group(1).capitalize() if match else "Confirmed"
-    return current_status
-
-
 def build_ics(events):
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//FYHA U9 Auto-Sync//Blue Vipers 11//EN",
              "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:FYHA U9 - Blue Vipers (11)",
-             "X-WR-TIMEZONE:America/Moncton", "REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H"]
+             "X-WR-TIMEZONE:America/Moncton", "REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H",
+             "BEGIN:VTIMEZONE", "TZID:America/Moncton",
+             "BEGIN:STANDARD", "DTSTART:20071104T020000", "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU",
+             "TZOFFSETFROM:-0300", "TZOFFSETTO:-0400", "TZNAME:AST", "END:STANDARD",
+             "BEGIN:DAYLIGHT", "DTSTART:20070311T020000", "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU",
+             "TZOFFSETFROM:-0400", "TZOFFSETTO:-0300", "TZNAME:ADT", "END:DAYLIGHT",
+             "END:VTIMEZONE"]
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     for ev in events:
         lines.extend(["BEGIN:VEVENT", f"UID:{ev['uid']}", f"DTSTAMP:{stamp}",
@@ -239,18 +232,18 @@ def build_ics(events):
 
 def run_stress_checks():
     sample_html = """
-    <div class="banner">Nov 23 - Nov 29</div>
-    <table>
+    <div class="block-wrap"><div class="banner">Nov 23 - Nov 29</div></div>
+    <div class="table-wrap"><table>
       <tr><th>Teams</th><th>Date</th><th>Time</th><th>Rink</th></tr>
       <tr><td>11 + 12</td><td>Saturday, Nov 28</td><td>7:30-8:30 AM</td><td>York</td></tr>
       <tr><td>9 + 11</td><td>Sunday, Nov 29</td><td>7:00-8:00 AM</td><td>Willie O'Ree 2</td></tr>
-    </table>
-    <div class="banner">Nov 30 - Dec 6 (TENTATIVE)</div>
-    <table>
+    </table></div>
+    <div class="block-wrap"><div class="banner">Nov 30 - Dec 6 (TENTATIVE)</div></div>
+    <div class="table-wrap"><table>
       <tr><th>Teams</th><th>Date</th><th>Time</th><th>Rink</th></tr>
       <tr><td>6 + 11</td><td>Saturday, Dec 5</td><td>9:00-10:00 AM</td><td>Willie O'Ree 1</td></tr>
       <tr><td>11 + 12</td><td>Sunday, Dec 6</td><td>7:00-8:00 AM</td><td>Grant Harvey Olympic</td></tr>
-    </table>
+    </table></div>
     """
     soup = BeautifulSoup(sample_html, "html.parser")
     names = dict(DEFAULT_TEAM_NAMES)
