@@ -9,38 +9,38 @@ REFRESH-INTERVAL;VALUE=DURATION:PT6H
 X-PUBLISHED-TTL:PT6H
 BEGIN:VEVENT
 UID:fyha-u9-t11-20261128-slot1@teamlinkt-sync
-DTSTAMP:20261127T214730Z
+DTSTAMP:20261127T215852Z
 DTSTART;TZID=America/Moncton:20261128T073000
 DTEND;TZID=America/Moncton:20261128T083000
-SUMMARY:[TENTATIVE] Blue Vipers vs Silver Rockets
+SUMMARY:Blue Vipers vs Silver Rockets
 LOCATION:York Arena
-DESCRIPTION:FYHA U9 Ice Time (Tentative). Source: https://leagues.teamlinkt.com/fyha/U9Division
+DESCRIPTION:FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
 END:VEVENT
 BEGIN:VEVENT
 UID:fyha-u9-t11-20261129-slot1@teamlinkt-sync
-DTSTAMP:20261127T214730Z
+DTSTAMP:20261127T215852Z
 DTSTART;TZID=America/Moncton:20261129T070000
 DTEND;TZID=America/Moncton:20261129T080000
-SUMMARY:[TENTATIVE] Blue Vipers vs Hurricanes
+SUMMARY:Blue Vipers vs Hurricanes
 LOCATION:Willie O'Ree Place\, Cliffe Street\, Fredericton\, NB\, Canada
-DESCRIPTION:Rink 2 - FYHA U9 Ice Time (Tentative). Source: https://leagues.teamlinkt.com/fyha/U9Division
+DESCRIPTION:Rink 2 - FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
 END:VEVENT
 BEGIN:VEVENT
 UID:fyha-u9-t11-20261205-slot1@teamlinkt-sync
-DTSTAMP:20261127T214730Z
+DTSTAMP:20261127T215852Z
 DTSTART;TZID=America/Moncton:20261205T090000
 DTEND;TZID=America/Moncton:20261205T100000
-SUMMARY:[TENTATIVE] Blue Vipers vs Red Wings
+SUMMARY:Blue Vipers vs Red Wings
 LOCATION:York Arena
-DESCRIPTION:FYHA U9 Ice Time (Tentative). Source: https://leagues.teamlinkt.com/fyha/U9Division
+DESCRIPTION:FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
 END:VEVENT
 BEGIN:VEVENT
 UID:fyha-u9-t11-20261206-slot1@teamlinkt-sync
-DTSTAMP:20261127T214730Z
+DTSTAMP:20261127T215852Z
 DTSTART;TZID=America/Moncton:20261206T070000
 DTEND;TZID=America/Moncton:20261206T080000
-SUMMARY:[TENTATIVE] Blue Vipers vs Silver Rockets
+SUMMARY:Blue Vipers vs Silver Rockets
 LOCATION:Willie O'Ree Place\, Cliffe Street\, Fredericton\, NB\, Canada
-DESCRIPTION:Rink 1 - FYHA U9 Ice Time (Tentative). Source: https://leagues.teamlinkt.com/fyha/U9Division
+DESCRIPTION:Rink 1 - FYHA U9 Ice Time (Confirmed). Source: https://leagues.teamlinkt.com/fyha/U9Division
 END:VEVENT
 END:VCALENDAR
