@@ -47,4 +47,4 @@ def load_custom_team_names(filepath=TEAM_NAMES_FILE):
         return {}
 
 
-def extract_roster
+def extract_roster_names(soup):
