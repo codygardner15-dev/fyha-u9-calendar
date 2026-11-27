@@ -117,7 +117,7 @@ def escape_ics(text):
 
 
 def table_status(table):
-    """Use the closest preceding date banner; missing status means Tentative."""
+    """Use the closest preceding date banner; no status marker means Confirmed."""
     # The website wraps banners and tables in divs. Walking backwards and stopping
     # at a previous table avoids accidentally inheriting an older week's status.
     for el in table.find_all_previous():
@@ -131,7 +131,7 @@ def table_status(table):
         if not text or len(text) > 200 or not DATE_BANNER_RE.search(text):
             continue
         match = STATUS_RE.search(text)
-        return match.group(1).capitalize() if match else "Tentative"
+        return match.group(1).capitalize() if match else "Confirmed"
 
     # Some schedule versions put status in a caption or a non-matchup row.
     caption = table.find("caption")
@@ -146,7 +146,7 @@ def table_status(table):
         match = STATUS_RE.search(" ".join(cells))
         if match:
             return match.group(1).capitalize()
-    return "Tentative"
+    return "Confirmed"
 
 
 def infer_season_year(dt_month, now=None):
@@ -251,9 +251,10 @@ def run_stress_checks():
     locs = {normalize_key(k): dict(v) for k, v in DEFAULT_LOCATIONS.items()}
     events = parse_schedule(soup, names, locs)
     assert len(events) == 5, f"Expected 5 events, got {len(events)}"
-    assert all("(Tentative)" in ev["description"] and ev["summary"].startswith("[TENTATIVE]") for ev in events[:4])
+    assert all("(Confirmed)" in ev["description"] and not ev["summary"].startswith("[TENTATIVE]") for ev in events[:2])
+    assert all("(Tentative)" in ev["description"] and ev["summary"].startswith("[TENTATIVE]") for ev in events[2:4])
     assert "(Confirmed)" in events[4]["description"] and not events[4]["summary"].startswith("[TENTATIVE]")
-    assert table_status(BeautifulSoup('<div class="banner">Nov 30 - Dec 6</div><div><table></table></div>', "html.parser").table) == "Tentative"
+    assert table_status(BeautifulSoup('<div class="banner">Nov 30 - Dec 6</div><div><table></table></div>', "html.parser").table) == "Confirmed"
     print("All stress tests passed.")
 
 
