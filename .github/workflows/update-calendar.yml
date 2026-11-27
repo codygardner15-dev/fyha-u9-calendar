@@ -1,1 +1,28 @@
+name: Update U9 Hockey iCal
 
+on:
+  schedule:
+    - cron: "0 */6 * * *" # Runs every 6 hours
+  workflow_dispatch:      # Allows manual runs anytime
+
+permissions:
+  contents: write
+
+jobs:
+  build-ics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests beautifulsoup4
+      - name: Run stress checks
+        run: RUN_STRESS_TESTS=1 python -c "import generate_ics; generate_ics.run_stress_checks()"
+      - run: python generate_ics.py
+      - name: Commit updated calendar
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add team11.ics
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update U9 schedule" && git push)
