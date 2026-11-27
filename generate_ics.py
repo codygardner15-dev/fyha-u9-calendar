@@ -38,6 +38,11 @@ DEFAULT_ARENA_MAP = {
     "beaverbrook": ("Lady Beaverbrook Rink", ""),
 }
 
+DATE_BANNER_RE = re.compile(
+    r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}\s*[-–—]\s*(?:[A-Za-z]+\s+)?\d{1,2}",
+    re.IGNORECASE,
+)
+
 
 def load_custom_team_names(filepath=TEAM_NAMES_FILE):
     if not os.path.exists(filepath):
@@ -137,22 +142,29 @@ def escape_ics(text):
 
 
 def table_is_tentative(table):
-    parts = []
+    # 1. Check inside the table's caption and first two rows first.
+    internal_parts = []
     caption = table.find("caption")
     if caption is not None:
-        parts.append(caption.get_text(" ", strip=True))
-
+        internal_parts.append(caption.get_text(" ", strip=True))
     for row in table.find_all("tr")[:2]:
-        parts.append(row.get_text(" ", strip=True))
+        internal_parts.append(row.get_text(" ", strip=True))
+    if "TENTATIVE" in " ".join(internal_parts).upper():
+        return True
 
-    prev = table.find_previous_sibling()
-    while prev is not None and not prev.get_text(" ", strip=True):
-        prev = prev.find_previous_sibling()
-    if prev is not None and prev.name != "table":
-        parts.append(prev.get_text(" ", strip=True))
+    # 2. Walk backwards in document order for the gray date-range banner bar
+    # directly above this table (even if wrapped in nested divs), stopping at
+    # any earlier table so flags never bleed across weeks.
+    for el in table.find_all_previous():
+        if el.name == "table" or el.find("table") is not None:
+            break
+        text = " ".join(el.get_text(" ", strip=True).split())
+        if not text:
+            continue
+        if DATE_BANNER_RE.search(text):
+            return "TENTATIVE" in text.upper()
 
-    banner_text = " ".join(parts)
-    return "TENTATIVE" in banner_text.upper()
+    return False
 
 
 def infer_season_year(dt_month, now=None):
@@ -290,17 +302,23 @@ def build_ics(events):
 
 def run_stress_checks():
     sample_html = """
-    <table>
-      <tr><th>Nov 23 - Nov 29</th></tr>
-      <tr><td>11 + 12</td><td>Saturday, Nov 28</td><td>7:30-8:30 AM</td><td>York</td></tr>
-      <tr><td>9 + 11</td><td>Sunday, Nov 29</td><td>7:00-8:00 AM</td><td>Willie O'Ree 2</td></tr>
-      <tr><td>11 + 13</td><td>Monday, Nov 30</td><td>4:30-5:30 PM</td><td>Grant Harvey NHL</td></tr>
-    </table>
-    <table>
-      <tr><th>Nov 30 - Dec 6 (TENTATIVE)</th></tr>
-      <tr><td>6 + 11</td><td>Saturday, Dec 5</td><td>9:00-10:00 AM</td><td>Willie O'Ree 1</td></tr>
-      <tr><td>11 + 12</td><td>Sunday, Dec 6</td><td>7:00-8:00 AM</td><td>Grant Harvey Olympic</td></tr>
-    </table>
+    <div class="block-wrap"><div class="banner">Nov 23 - Nov 29</div></div>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Teams</th><th>Date</th><th>Time</th><th>Rink</th></tr>
+        <tr><td>11 + 12</td><td>Saturday, Nov 28</td><td>7:30-8:30 AM</td><td>York</td></tr>
+        <tr><td>9 + 11</td><td>Sunday, Nov 29</td><td>7:00-8:00 AM</td><td>Willie O'Ree 2</td></tr>
+        <tr><td>11 + 13</td><td>Monday, Nov 30</td><td>4:30-5:30 PM</td><td>Grant Harvey NHL</td></tr>
+      </table>
+    </div>
+    <div class="block-wrap"><div class="banner">Nov 30 - Dec 6 (TENTATIVE)</div></div>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Teams</th><th>Date</th><th>Time</th><th>Rink</th></tr>
+        <tr><td>6 + 11</td><td>Saturday, Dec 5</td><td>9:00-10:00 AM</td><td>Willie O'Ree 1</td></tr>
+        <tr><td>11 + 12</td><td>Sunday, Dec 6</td><td>7:00-8:00 AM</td><td>Grant Harvey Olympic</td></tr>
+      </table>
+    </div>
     <table>
       <tr><th>Hurricanes (9)</th><th>Silver Rockets (12)</th></tr>
     </table>
@@ -329,8 +347,8 @@ def run_stress_checks():
         assert york_loc == "York Arena" and york_rink == ""
 
         new_arena_html = """
+        <div>Dec 7 - Dec 13</div>
         <table>
-          <tr><th>Dec 7 - Dec 13</th></tr>
           <tr><td>11 + 1</td><td>Saturday, Dec 12</td><td>8:00-9:00 AM</td><td>Aitken Centre</td></tr>
         </table>
         """
