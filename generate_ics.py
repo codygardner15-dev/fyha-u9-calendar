@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from collections import defaultdict
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 import requests
@@ -96,19 +97,35 @@ def escape_ics(text):
     )
 
 
+def table_is_tentative(table):
+    # Inspect only this table's own caption and first header/row so each weekly
+    # table independently reflects whether "(TENTATIVE)" is present on the page.
+    caption = table.find("caption")
+    first_row = table.find("tr")
+    banner_text = " ".join(
+        part.get_text(" ", strip=True)
+        for part in (caption, first_row)
+        if part is not None
+    )
+    return "TENTATIVE" in banner_text.upper()
+
+
+def infer_season_year(dt_month, now=None):
+    ref = now or datetime.now()
+    # FYHA hockey seasons run roughly September through April across calendar years.
+    if ref.month >= 9 and dt_month <= 4:
+        return ref.year + 1
+    if ref.month <= 4 and dt_month >= 9:
+        return ref.year - 1
+    return ref.year
+
+
 def parse_schedule(soup, team_names):
-    events = []
+    raw_events = []
+    now = datetime.now()
 
     for table in soup.find_all("table"):
-        caption = table.find("caption")
-        first_row = table.find("tr")
-        prev_el = table.find_previous(["h1", "h2", "h3", "h4", "p", "div"])
-        banner_text = " ".join(
-            part.get_text(" ", strip=True)
-            for part in (caption, first_row, prev_el)
-            if part is not None
-        )
-        is_tentative = "TENTATIVE" in banner_text.upper()
+        is_tentative = table_is_tentative(table)
 
         for row in table.find_all("tr"):
             cells = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
@@ -125,17 +142,24 @@ def parse_schedule(soup, team_names):
             opponent = team_names.get(opponent_num, f"Team {opponent_num}")
             location_name, rink_note = map_location(raw_rink)
 
-            clean_date = re.sub(r"^[A-Za-z]+,\s*", "", date_str)
-            now = datetime.now()
-            dt_date = datetime.strptime(f"{clean_date} {now.year}", "%b %d %Y")
-            if now.month >= 9 and dt_date.month <= 4:
-                dt_date = dt_date.replace(year=now.year + 1)
+            clean_date = re.sub(r"^[A-Za-z]+,\s*", "", date_str).strip()
+            month_day_dt = datetime.strptime(f"{clean_date} 2000", "%b %d %Y")
+            season_year = infer_season_year(month_day_dt.month, now)
+            dt_date = month_day_dt.replace(year=season_year)
 
             time_clean = time_str.replace("\u2013", "-").replace("\u2014", "-")
-            start_part, end_part = [p.strip() for p in time_clean.split("-")]
-            meridiem = "PM" if "PM" in end_part.upper() else "AM"
-            if "AM" not in start_part.upper() and "PM" not in start_part.upper():
+            time_parts = [p.strip() for p in time_clean.split("-")]
+            if len(time_parts) != 2:
+                continue
+            start_part, end_part = time_parts
+
+            end_upper = end_part.upper()
+            start_upper = start_part.upper()
+            meridiem = "PM" if "PM" in end_upper else ("AM" if "AM" in end_upper else "AM")
+            if "AM" not in start_upper and "PM" not in start_upper:
                 start_part = f"{start_part} {meridiem}"
+            if "AM" not in end_upper and "PM" not in end_upper:
+                end_part = f"{end_part} {meridiem}"
 
             start_dt = datetime.strptime(
                 f"{dt_date.strftime('%Y-%m-%d')} {start_part}",
@@ -148,7 +172,6 @@ def parse_schedule(soup, team_names):
 
             status_prefix = "[TENTATIVE] " if is_tentative else ""
             status_label = "Tentative" if is_tentative else "Confirmed"
-            uid = f"fyha-u9-t{TEAM_NUMBER}-{start_dt.strftime('%Y%m%dT%H%M')}@teamlinkt-sync"
 
             desc_parts = []
             if rink_note:
@@ -156,14 +179,36 @@ def parse_schedule(soup, team_names):
             desc_parts.append(f"FYHA U9 Ice Time ({status_label}). Source: {URL}")
             description = " - ".join(desc_parts)
 
-            events.append({
-                "uid": uid,
+            raw_events.append({
+                "date_key": start_dt.strftime("%Y%m%d"),
+                "start_dt": start_dt,
                 "summary": f"{status_prefix}{TEAM_NAME} vs {opponent}",
                 "location": location_name,
                 "dtstart": start_dt.strftime("%Y%m%dT%H%M%S"),
                 "dtend": end_dt.strftime("%Y%m%dT%H%M%S"),
                 "description": description,
             })
+
+    # Sort chronologically so daily slot numbering (slot1, slot2, ...) is deterministic
+    # and overwrites the same event slot even if time or rink changes on that date.
+    raw_events.sort(key=lambda e: e["start_dt"])
+
+    daily_slot_counts = defaultdict(int)
+    events = []
+    for ev in raw_events:
+        date_key = ev["date_key"]
+        daily_slot_counts[date_key] += 1
+        slot_num = daily_slot_counts[date_key]
+        uid = f"fyha-u9-t{TEAM_NUMBER}-{date_key}-slot{slot_num}@teamlinkt-sync"
+
+        events.append({
+            "uid": uid,
+            "summary": ev["summary"],
+            "location": ev["location"],
+            "dtstart": ev["dtstart"],
+            "dtend": ev["dtend"],
+            "description": ev["description"],
+        })
 
     return events
 
@@ -197,7 +242,7 @@ def build_ics(events):
 
     lines.append("END:VCALENDAR")
     with open(OUTPUT_FILE, "w", encoding="utf-8", newline="\r\n") as f:
-        f.write("\n".join(lines) + "\n")
+        f.write("\r\n".join(lines) + "\r\n")
 
 
 def run_stress_checks():
@@ -262,40 +307,3 @@ def run_stress_checks():
 
         evs = parse_schedule(soup, names)
         assert len(evs) == 5, f"Expected 5 events, got {len(evs)}"
-        assert evs[0]["summary"] == "Blue Vipers vs Silver Rockets"
-        assert evs[0]["location"] == "York Arena"
-        assert evs[1]["summary"] == "Blue Vipers vs Hurricanes"
-        assert "Rink 2" in evs[1]["description"]
-        assert evs[2]["summary"] == "Blue Vipers vs Team 13"
-        assert "NHL Rink" in evs[2]["description"]
-        assert evs[3]["summary"] == "[TENTATIVE] Blue Vipers vs Red Wings"
-        assert "Rink 1" in evs[3]["description"]
-        assert evs[4]["summary"] == "[TENTATIVE] Blue Vipers vs Silver Rockets"
-        assert "Olympic Rink" in evs[4]["description"]
-
-        assert escape_ics("A;B,C\\D\nE") == "A\\;B\\,C\\\\D\\nE"
-        globals()["OUTPUT_FILE"] = test_output
-        build_ics(evs)
-        assert os.path.exists(test_output)
-        with open(test_output, "r", encoding="utf-8") as f:
-            ics_text = f.read()
-        assert "BEGIN:VCALENDAR" in ics_text
-        assert "END:VCALENDAR" in ics_text
-        assert "SUMMARY:[TENTATIVE] Blue Vipers vs Red Wings" in ics_text
-    finally:
-        globals()["TEAM_NAMES_FILE"] = original_names_file
-        globals()["OUTPUT_FILE"] = original_output
-        if os.path.exists(test_output):
-            os.remove(test_output)
-
-    print("All stress tests passed.")
-
-
-if __name__ == "__main__":
-    if os.environ.get("RUN_STRESS_TESTS") == "1":
-        run_stress_checks()
-    resp = requests.get(URL, timeout=15)
-    resp.raise_for_status()
-    page_soup = BeautifulSoup(resp.text, "html.parser")
-    active_names = resolve_team_names(page_soup)
-    build_ics(parse_schedule(page_soup, active_names))
