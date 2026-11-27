@@ -166,7 +166,6 @@ def escape_ics(text):
 
 
 def table_is_tentative(table):
-    # 1. Check caption and non-matchup rows inside the table itself.
     caption = table.find("caption")
     if caption is not None and TENTATIVE_RE.search(caption.get_text(" ", strip=True)):
         return True
@@ -178,7 +177,6 @@ def table_is_tentative(table):
         if cells and TENTATIVE_RE.search(" ".join(cells)):
             return True
 
-    # 2. Look backwards up to the previous table for the nearest date-range header/banner.
     for el in table.find_all_previous():
         if el is table:
             continue
@@ -278,7 +276,6 @@ def parse_schedule(soup, team_names, locations_map=None):
                 "description": description,
             })
 
-    # Sort chronologically so daily slot numbering (slot1, slot2, ...) is deterministic
     raw_events.sort(key=lambda e: e["start_dt"])
 
     daily_slot_counts = defaultdict(int)
@@ -423,7 +420,6 @@ def run_stress_checks():
         assert "(Tentative)" in evs[4]["description"]
         assert "Olympic Rink" in evs[4]["description"]
 
-        # Verify UID stays identical if start time, rink, or tentative status changes on that date
         shifted_html = (
             sample_html.replace("9:00-10:00 AM", "8:15-9:15 AM")
             .replace("Willie O'Ree 1", "York")
