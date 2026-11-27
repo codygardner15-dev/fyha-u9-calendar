@@ -117,28 +117,28 @@ def escape_ics(text):
 
 
 def table_status(table):
-    """Use the closest preceding date banner; no status marker means Confirmed."""
-    # The website wraps banners and tables in divs. Walking backwards and stopping
-    # at a previous table avoids accidentally inheriting an older week's status.
+    """Use the nearest preceding date banner for this table."""
+    # A banner status applies to every table directly below it until another banner.
     for el in table.find_all_previous():
         if el.name == "table":
             break
-        # A wrapper around tables can contain a lot of unrelated schedule text.
-        # Skip it rather than treating its aggregated text as a date header.
         if el.find("table") is not None:
             continue
         text = " ".join(el.get_text(" ", strip=True).split())
         if not text or len(text) > 200 or not DATE_BANNER_RE.search(text):
             continue
         match = STATUS_RE.search(text)
-        return match.group(1).capitalize() if match else "Confirmed"
+        if match:
+            return match.group(1).capitalize()
+        # Date range without a status marker means confirmed.
+        return "Confirmed"
 
-    # Some schedule versions put status in a caption or a non-matchup row.
     caption = table.find("caption")
     if caption:
         match = STATUS_RE.search(caption.get_text(" ", strip=True))
         if match:
             return match.group(1).capitalize()
+
     for row in table.find_all("tr"):
         cells = [" ".join(c.get_text(" ", strip=True).split()) for c in row.find_all(["td", "th"])]
         if not cells or any("+" in cell for cell in cells):
@@ -146,6 +146,7 @@ def table_status(table):
         match = STATUS_RE.search(" ".join(cells))
         if match:
             return match.group(1).capitalize()
+
     return "Confirmed"
 
 
