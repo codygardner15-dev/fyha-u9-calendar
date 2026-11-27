@@ -38,6 +38,7 @@ DEFAULT_ARENA_MAP = {
     "beaverbrook": ("Lady Beaverbrook Rink", ""),
 }
 
+TENTATIVE_RE = re.compile(r"[\(\[]\s*TENTATIVE\s*[\)\]]|\bTENTATIVE\b", re.IGNORECASE)
 DATE_BANNER_RE = re.compile(
     r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}\s*[-–—]\s*(?:[A-Za-z]+\s+)?\d{1,2}",
     re.IGNORECASE,
@@ -115,6 +116,8 @@ def load_locations(filepath=LOCATIONS_FILE):
 
 def map_location(raw_rink, locations_map=None):
     clean = " ".join(raw_rink.replace("\u2019", "'").split()).strip()
+    if not clean:
+        return "TBD", ""
     lower = clean.lower()
     lookup = locations_map if locations_map is not None else load_locations()
 
@@ -142,36 +145,51 @@ def escape_ics(text):
 
 
 def table_is_tentative(table):
-    internal_parts = []
+    # 1. Inspect table caption and any header/banner rows before the first data row.
+    parts = []
     caption = table.find("caption")
     if caption is not None:
-        internal_parts.append(caption.get_text(" ", strip=True))
-    for row in table.find_all("tr")[:2]:
-        internal_parts.append(row.get_text(" ", strip=True))
-    if "TENTATIVE" in " ".join(internal_parts).upper():
+        parts.append(caption.get_text(" ", strip=True))
+
+    for row in table.find_all("tr"):
+        cells = [c.get_text(" ", strip=True) for c in row.find_all(["td", "th"])]
+        if cells and "+" in cells[0]:
+            break
+        if cells:
+            parts.append(" ".join(cells))
+
+    if TENTATIVE_RE.search(" ".join(parts)):
         return True
 
+    # 2. Walk backwards through preceding elements without crossing an earlier table,
+    # checking only banner/heading-like blocks that contain a date range or TENTATIVE.
     for el in table.find_all_previous():
         if el is table:
             continue
         if el.name == "table" or any(t is not table for t in el.find_all("table")):
             break
-        text = " ".join(el.get_text(" ", strip=True).split())
-        if not text:
+        if el.name not in ("div", "p", "h1", "h2", "h3", "h4", "h5", "h6", "section", "header", "tr", "th"):
             continue
-        if DATE_BANNER_RE.search(text):
-            return "TENTATIVE" in text.upper()
+        text = " ".join(el.get_text(" ", strip=True).split())
+        if not text or len(text) > 160:
+            continue
+        if DATE_BANNER_RE.search(text) or TENTATIVE_RE.search(text):
+            return bool(TENTATIVE_RE.search(text))
 
     return False
 
 
 def infer_season_year(dt_month, now=None):
     ref = now or datetime.now()
-    if ref.month >= 9 and dt_month <= 4:
-        return ref.year + 1
-    if ref.month <= 4 and dt_month >= 9:
-        return ref.year - 1
-    return ref.year
+    # Hockey season runs roughly Aug/Sep through Mar/Apr.
+    if ref.month >= 8:
+        season_start_year = ref.year
+    else:
+        season_start_year = ref.year - 1
+
+    if dt_month >= 8:
+        return season_start_year
+    return season_start_year + 1
 
 
 def parse_schedule(soup, team_names, locations_map=None):
@@ -188,8 +206,10 @@ def parse_schedule(soup, team_names, locations_map=None):
                 continue
 
             teams_raw, date_str, time_str, raw_rink = cells[0], cells[1], cells[2], cells[3]
-            teams = [t.strip() for t in teams_raw.split("+")]
+            if not raw_rink.strip():
+                continue
 
+            teams = [t.strip() for t in teams_raw.split("+")]
             if TEAM_NUMBER not in teams:
                 continue
 
@@ -309,7 +329,7 @@ def run_stress_checks():
         <tr><td>11 + 13</td><td>Monday, Nov 30</td><td>4:30-5:30 PM</td><td>Grant Harvey NHL</td></tr>
       </table>
     </div>
-    <div class="block-wrap"><div class="banner">Nov 30 - Dec 6 (TENTATIVE)</div></div>
+    <div class="block-wrap"><div class="banner">Nov 30 - Dec 6 (Tentative)</div></div>
     <div class="table-wrap">
       <table>
         <tr><th>Teams</th><th>Date</th><th>Time</th><th>Rink</th></tr>
@@ -367,7 +387,7 @@ def run_stress_checks():
         shifted_html = (
             sample_html.replace("9:00-10:00 AM", "8:15-9:15 AM")
             .replace("Willie O'Ree 1", "York")
-            .replace("Nov 30 - Dec 6 (TENTATIVE)", "Nov 30 - Dec 6")
+            .replace("Nov 30 - Dec 6 (Tentative)", "Nov 30 - Dec 6")
         )
         shifted_evs = parse_schedule(BeautifulSoup(shifted_html, "html.parser"), names, locs)
         assert shifted_evs[3]["uid"] == evs[3]["uid"]
