@@ -31,6 +31,7 @@ DEFAULT_LOCATIONS = {
 }
 
 STATUS_RE = re.compile(r"\b(CONFIRMED|TENTATIVE)\b", re.IGNORECASE)
+STATUS_LINE_RE = re.compile(r"^\s*(?:status\s*:\s*)?(CONFIRMED|TENTATIVE)[\s.!:;,-]*$", re.IGNORECASE)
 DATE_BANNER_RE = re.compile(
     r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s\xa0]+\d{1,2}[\s\xa0]*[-–—][\s\xa0]*(?:[A-Za-z]+[\s\xa0]+)?\d{1,2}",
     re.IGNORECASE,
@@ -117,34 +118,46 @@ def escape_ics(text):
 
 
 def table_status(table):
-    """Use the nearest preceding date banner for this table."""
+    """Get status from the strict standalone status line after the nearest date banner.
+
+    TeamLinkt may render the date range and CONFIRMED/TENTATIVE as separate
+    headings. Search backward from the schedule table, remember the nearest
+    standalone status line, and stop at the nearest earlier date banner or
+    schedule table so a previous week's status cannot leak into this week.
+    """
+    status_line = None
     for el in table.find_all_previous():
         if el.name == "table":
             break
         if el.find("table") is not None:
             continue
         text = " ".join(el.get_text(" ", strip=True).split())
-        if not text or len(text) > 200 or not DATE_BANNER_RE.search(text):
+        if not text or len(text) > 200:
             continue
-        match = STATUS_RE.search(text)
-        if match:
-            return match.group(1).capitalize()
-        return "Confirmed"
+
+        # Ignore wrapper tags when a more specific descendant contains the
+        # date header; its text is visited separately during this reverse scan.
+        if DATE_BANNER_RE.search(text) and any(
+            DATE_BANNER_RE.search(" ".join(child.get_text(" ", strip=True).split()))
+            for child in el.find_all(True)
+        ):
+            continue
+
+        if DATE_BANNER_RE.search(text):
+            if status_line:
+                return status_line
+            match = STATUS_RE.search(text)
+            return match.group(1).capitalize() if match else "Confirmed"
+
+        match = STATUS_LINE_RE.fullmatch(text)
+        if match and status_line is None:
+            status_line = match.group(1).capitalize()
 
     caption = table.find("caption")
     if caption:
         match = STATUS_RE.search(caption.get_text(" ", strip=True))
         if match:
             return match.group(1).capitalize()
-
-    for row in table.find_all("tr"):
-        cells = [" ".join(c.get_text(" ", strip=True).split()) for c in row.find_all(["td", "th"])]
-        if not cells or any("+" in cell for cell in cells):
-            break
-        match = STATUS_RE.search(" ".join(cells))
-        if match:
-            return match.group(1).capitalize()
-
     return "Confirmed"
 
 
@@ -232,18 +245,20 @@ def build_ics(events):
 
 def run_stress_checks():
     sample_html = """
-    <div class="block-wrap"><div class="banner">Nov 23 - Nov 29</div></div>
-    <div class="table-wrap"><table>
+    <h3>Nov 23 - Nov 29</h3>
+    <h4>CONFIRMED</h4>
+    <table>
       <tr><th>Teams</th><th>Date</th><th>Time</th><th>Rink</th></tr>
       <tr><td>11 + 12</td><td>Saturday, Nov 28</td><td>7:30-8:30 AM</td><td>York</td></tr>
       <tr><td>9 + 11</td><td>Sunday, Nov 29</td><td>7:00-8:00 AM</td><td>Willie O'Ree 2</td></tr>
-    </table></div>
-    <div class="block-wrap"><div class="banner">Nov 30 - Dec 6 (TENTATIVE)</div></div>
-    <div class="table-wrap"><table>
+    </table>
+    <h3>Nov 30 - Dec 6</h3>
+    <h4>TENTATIVE</h4>
+    <table>
       <tr><th>Teams</th><th>Date</th><th>Time</th><th>Rink</th></tr>
       <tr><td>6 + 11</td><td>Saturday, Dec 5</td><td>9:00-10:00 AM</td><td>Willie O'Ree 1</td></tr>
       <tr><td>11 + 12</td><td>Sunday, Dec 6</td><td>7:00-8:00 AM</td><td>Grant Harvey Olympic</td></tr>
-    </table></div>
+    </table>
     """
     soup = BeautifulSoup(sample_html, "html.parser")
     names = dict(DEFAULT_TEAM_NAMES)
