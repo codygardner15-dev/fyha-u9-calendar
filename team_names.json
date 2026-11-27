@@ -12,11 +12,3 @@
   "11": "Blue Vipers",
   "12": "Silver Rockets"
 }
-```[cite: 10]
-
-### How to Update `team_names.json`
-1. Open `team_names.json` on `main` in GitHub and click the **Edit (pencil)** icon.
-2. Replace its contents with the JSON above.
-3. Click **Commit changes...** > **Commit changes** directly to `main`.
-
-Once that's saved, the next file to check is **`.github/workflows/update-calendar.yml`**—share or screenshot that file when you're ready to verify it next.
