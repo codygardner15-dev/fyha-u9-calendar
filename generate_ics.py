@@ -118,20 +118,18 @@ def escape_ics(text):
 
 def table_status(table):
     """Use the nearest preceding date banner for this table."""
-    # A banner status applies to every table directly below it until another banner.
+    # Some TeamLinkt layouts render a date banner as a table. Check for a date
+    # range before treating a preceding table as a schedule-section boundary.
     for el in table.find_all_previous():
-        if el.name == "table":
-            break
         if el.find("table") is not None:
             continue
         text = " ".join(el.get_text(" ", strip=True).split())
-        if not text or len(text) > 200 or not DATE_BANNER_RE.search(text):
-            continue
-        match = STATUS_RE.search(text)
-        if match:
-            return match.group(1).capitalize()
-        # Date range without a status marker means confirmed.
-        return "Confirmed"
+        if text and len(text) <= 200 and DATE_BANNER_RE.search(text):
+            match = STATUS_RE.search(text)
+            return match.group(1).capitalize() if match else "Confirmed"
+        # Do not inherit a status from a previous schedule section.
+        if el.name == "table":
+            break
 
     caption = table.find("caption")
     if caption:
@@ -256,6 +254,9 @@ def run_stress_checks():
     assert all("(Tentative)" in ev["description"] and ev["summary"].startswith("[TENTATIVE]") for ev in events[2:4])
     assert "(Confirmed)" in events[4]["description"] and not events[4]["summary"].startswith("[TENTATIVE]")
     assert table_status(BeautifulSoup('<div class="banner">Nov 30 - Dec 6</div><div><table></table></div>', "html.parser").table) == "Confirmed"
+    table_banner_html = '<table><tr><th>Nov 30 - Dec 6 (TENTATIVE)</th></tr></table><table><tr><td>Teams</td></tr></table>'
+    table_banner_soup = BeautifulSoup(table_banner_html, "html.parser")
+    assert table_status(table_banner_soup.find_all("table")[-1]) == "Tentative"
     print("All stress tests passed.")
 
 
