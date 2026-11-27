@@ -68,7 +68,7 @@ def resolve_team_names(soup):
 
 
 def map_location(raw_rink):
-    clean = raw_rink.replace("’", "'").strip()
+    clean = raw_rink.replace("\u2019", "'").strip()
     lower = clean.lower()
 
     if "willie o'ree 1" in lower:
@@ -125,17 +125,19 @@ def parse_schedule(soup, team_names):
             if now.month >= 9 and dt_date.month <= 4:
                 dt_date = dt_date.replace(year=now.year + 1)
 
-            time_clean = time_str.replace("–", "-").replace("—", "-")
+            time_clean = time_str.replace("\u2013", "-").replace("\u2014", "-")
             start_part, end_part = [p.strip() for p in time_clean.split("-")]
             meridiem = "PM" if "PM" in end_part.upper() else "AM"
             if "AM" not in start_part.upper() and "PM" not in start_part.upper():
                 start_part = f"{start_part} {meridiem}"
 
             start_dt = datetime.strptime(
-                f"{dt_date.strftime('%Y-%m-%d')} {start_part}", "%Y-%m-%d %I:%M %p"
+                f"{dt_date.strftime('%Y-%m-%d')} {start_part}",
+                "%Y-%m-%d %I:%M %p",
             )
             end_dt = datetime.strptime(
-                f"{dt_date.strftime('%Y-%m-%d')} {end_part}", "%Y-%m-%d %I:%M %p"
+                f"{dt_date.strftime('%Y-%m-%d')} {end_part}",
+                "%Y-%m-%d %I:%M %p",
             )
 
             status_prefix = "[TENTATIVE] " if is_tentative else ""
@@ -145,4 +147,133 @@ def parse_schedule(soup, team_names):
             desc_parts = []
             if rink_note:
                 desc_parts.append(rink_note)
-           desc_parts.append(f"FYHA U9 Ice Time ({status_label}). Source: {URL}")
+            desc_parts.append(f"FYHA U9 Ice Time ({status_label}). Source: {URL}")
+            description = " - ".join(desc_parts)
+
+            events.append({
+                "uid": uid,
+                "summary": f"{status_prefix}{TEAM_NAME} vs {opponent}",
+                "location": location_name,
+                "dtstart": start_dt.strftime("%Y%m%dT%H%M%S"),
+                "dtend": end_dt.strftime("%Y%m%dT%H%M%S"),
+                "description": description,
+            })
+
+    return events
+
+
+def build_ics(events):
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//FYHA U9 Auto-Sync//Blue Vipers 11//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "X-WR-CALNAME:FYHA U9 - Blue Vipers (11)",
+        "X-WR-TIMEZONE:America/Moncton",
+        "REFRESH-INTERVAL;VALUE=DURATION:PT6H",
+        "X-PUBLISHED-TTL:PT6H",
+    ]
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+    for ev in events:
+        lines.extend([
+            "BEGIN:VEVENT",
+            f"UID:{ev['uid']}",
+            f"DTSTAMP:{stamp}",
+            f"DTSTART;TZID=America/Moncton:{ev['dtstart']}",
+            f"DTEND;TZID=America/Moncton:{ev['dtend']}",
+            f"SUMMARY:{escape_ics(ev['summary'])}",
+            f"LOCATION:{escape_ics(ev['location'])}",
+            f"DESCRIPTION:{escape_ics(ev['description'])}",
+            "END:VEVENT",
+        ])
+
+    lines.append("END:VCALENDAR")
+    with open(OUTPUT_FILE, "w", encoding="utf-8", newline="\r\n") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def run_stress_checks():
+    sample_html = """
+    <table>
+      <tr><th>Nov 23 - Nov 29</th></tr>
+      <tr><td>11 + 12</td><td>Saturday, Nov 28</td><td>7:30-8:30 AM</td><td>York</td></tr>
+      <tr><td>9 + 11</td><td>Sunday, Nov 29</td><td>7:00-8:00 AM</td><td>Willie O'Ree 2</td></tr>
+      <tr><td>11 + 13</td><td>Monday, Nov 30</td><td>4:30-5:30 PM</td><td>Grant Harvey NHL</td></tr>
+    </table>
+    <table>
+      <tr><th>Nov 30 - Dec 6 (TENTATIVE)</th></tr>
+      <tr><td>6 + 11</td><td>Saturday, Dec 5</td><td>9:00-10:00 AM</td><td>Willie O'Ree 1</td></tr>
+      <tr><td>11 + 12</td><td>Sunday, Dec 6</td><td>7:00-8:00 AM</td><td>Grant Harvey Olympic</td></tr>
+    </table>
+    <table><th>Hurricanes (9)</th><th>Silver Rockets (12)</th></table>
+    """
+    soup = BeautifulSoup(sample_html, "html.parser")
+
+    names = resolve_team_names(soup)
+    assert names["9"] == "Hurricanes", f"Expected Hurricanes, got {names['9']}"
+    assert names["12"] == "Silver Rockets", f"Expected Silver Rockets, got {names['12']}"
+    assert names["13"] == "Team 13", f"Expected Team 13 fallback, got {names['13']}"
+
+    york_loc, york_rink = map_location("York")
+    assert york_loc == "York Arena" and york_rink == ""
+
+    wor1_loc, wor1_rink = map_location("Willie O'Ree 1")
+    assert wor1_loc == "Willie O'Ree Place, Cliffe Street, Fredericton, NB, Canada"
+    assert wor1_rink == "Rink 1"
+
+    wor2_loc, wor2_rink = map_location("Willie O'Ree 2")
+    assert wor2_loc == "Willie O'Ree Place, Cliffe Street, Fredericton, NB, Canada"
+    assert wor2_rink == "Rink 2"
+
+    gh_nhl_loc, gh_nhl_rink = map_location("Grant Harvey NHL")
+    assert gh_nhl_loc == "Grant-Harvey Centre" and gh_nhl_rink == "NHL Rink"
+
+    gh_oly_loc, gh_oly_rink = map_location("Grant Harvey Olympic")
+    assert gh_oly_loc == "Grant-Harvey Centre" and gh_oly_rink == "Olympic Rink"
+
+    beav_loc, beav_rink = map_location("Beaverbrook")
+    assert beav_loc == "Lady Beaverbrook Rink" and beav_rink == ""
+
+    evs = parse_schedule(soup, names)
+    assert len(evs) == 5, f"Expected 5 events, got {len(evs)}"
+    assert evs[0]["summary"] == "Blue Vipers vs Silver Rockets"
+    assert evs[0]["location"] == "York Arena"
+    assert evs[1]["summary"] == "Blue Vipers vs Hurricanes"
+    assert "Rink 2" in evs[1]["description"]
+    assert evs[2]["summary"] == "Blue Vipers vs Team 13"
+    assert "NHL Rink" in evs[2]["description"]
+    assert evs[3]["summary"] == "[TENTATIVE] Blue Vipers vs Red Wings"
+    assert "Rink 1" in evs[3]["description"]
+    assert evs[4]["summary"] == "[TENTATIVE] Blue Vipers vs Silver Rockets"
+    assert "Olympic Rink" in evs[4]["description"]
+
+    assert escape_ics("A;B,C\\D\nE") == "A\\;B\\,C\\\\D\\nE"
+    test_output = "stress_test_output.ics"
+    original_output = globals()["OUTPUT_FILE"]
+    try:
+        globals()["OUTPUT_FILE"] = test_output
+        build_ics(evs)
+        assert os.path.exists(test_output)
+        with open(test_output, "r", encoding="utf-8") as f:
+            ics_text = f.read()
+        assert "BEGIN:VCALENDAR" in ics_text
+        assert "END:VCALENDAR" in ics_text
+        assert "SUMMARY:[TENTATIVE] Blue Vipers vs Red Wings" in ics_text
+    finally:
+        globals()["OUTPUT_FILE"] = original_output
+        if os.path.exists(test_output):
+            os.remove(test_output)
+
+    print("All stress tests passed.")
+
+
+if __name__ == "__main__":
+    if os.environ.get("RUN_STRESS_TESTS") == "1":
+        run_stress_checks()
+    resp = requests.get(URL, timeout=15)
+    resp.raise_for_status()
+    page_soup = BeautifulSoup(resp.text, "html.parser")
+    active_names = resolve_team_names(page_soup)
+    build_ics(parse_schedule(page_soup, active_names))
