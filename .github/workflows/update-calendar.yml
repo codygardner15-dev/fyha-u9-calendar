@@ -20,6 +20,29 @@ jobs:
       - name: Run stress checks
         run: RUN_STRESS_TESTS=1 python -c "import generate_ics; generate_ics.run_stress_checks()"
       - run: python generate_ics.py
+      - name: Remove blank lines from iCal
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("team11.ics")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          # iCalendar values may contain spaces; only remove empty/whitespace-only lines.
+          path.write_text("\r\n".join(line for line in lines if line.strip()) + "\r\n", encoding="utf-8", newline="")
+          PY
+      - name: Validate iCal structure
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          content = Path("team11.ics").read_text(encoding="utf-8")
+          lines = content.splitlines()
+          assert lines[0] == "BEGIN:VCALENDAR"
+          assert lines[-1] == "END:VCALENDAR"
+          assert all(line.strip() for line in lines), "iCal contains blank lines"
+          assert lines.count("BEGIN:VEVENT") == lines.count("END:VEVENT"), "Unbalanced event blocks"
+          print(f"Validated iCal: {lines.count('BEGIN:VEVENT')} events, no blank lines.")
+          PY
       - name: Commit updated calendar
         run: |
           git config user.name "github-actions[bot]"
